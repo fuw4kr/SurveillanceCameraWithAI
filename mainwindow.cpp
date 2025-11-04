@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <iostream>
 
-
 using namespace cv;
 using namespace std;
 using namespace std::chrono;
