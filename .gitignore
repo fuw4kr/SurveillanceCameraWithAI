@@ -1,9 +1,13 @@
 *.txt
 !CMakeLists.txt
 CMakeLists.txt.user
+CMakeSettings.json
 cmake-build-debug
 build
 .idea
+.vs
+out
+vcpkg_installed
 
 # Prerequisites
 *.d
@@ -46,3 +50,10 @@ build
 
 # debug information files
 *.dwo
+/editor.xml
+/misc.xml
+/modules.xml
+/QtSettings.xml
+/SurveillanceCameraWithAI.iml
+/vcs.xml
+/workspace.xml
