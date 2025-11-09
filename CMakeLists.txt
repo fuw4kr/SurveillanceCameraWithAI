@@ -19,27 +19,23 @@ endif()
 set(OpenCV_ROOT "${VCPKG_INSTALLED_DIR}/x64-windows/share/opencv4")
     find_package(OpenCV REQUIRED)
 
-find_package(Qt6 COMPONENTS Widgets Network OpenGL Multimedia Svg REQUIRED)
+find_package(Qt6 COMPONENTS Widgets Charts Network OpenGL Multimedia Svg REQUIRED)
 
 # ======================================================
 # === Файли проєкту
 # ======================================================
 set(SOURCES
-    main.cpp
-    mainwindow.cpp
-    windowEdit/framelessWindow.cpp
-    windowEdit/snapPreviewWindow.cpp
-)
+    src/main.cpp
+    src/ui/mainwindow.cpp
+    src/ui/windowEdit/framelessWindow.cpp
+    src/ui/windowEdit/snapPreviewWindow.cpp
+ "src/ui/pages/dashboardpage.cpp")
 
 set(HEADERS
-    mainwindow.h
-    windowEdit/framelessWindow.h
-    windowEdit/snapPreviewWindow.h
-)
-
-set(UI
-    mainwindow.ui
-)
+    src/ui/mainwindow.h
+    src/ui/windowEdit/framelessWindow.h
+    src/ui/windowEdit/snapPreviewWindow.h
+ "src/ui/pages/dashboardpage.h")
 
 # ======================================================
 # === Виконуваний файл
@@ -47,7 +43,6 @@ set(UI
 add_executable(${PROJECT_NAME}
     ${SOURCES}
     ${HEADERS}
-    ${UI}
 )
 
 # === DEPLOY Qt platform plugin ===
@@ -73,6 +68,7 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Svg
     Qt6::Network
     Qt6::OpenGL
+    Qt6::Charts
     ${OpenCV_LIBS}
 )
 

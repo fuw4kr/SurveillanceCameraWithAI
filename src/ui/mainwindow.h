@@ -1,40 +1,55 @@
+/**
+ * @file MainWindow.h
+ * @brief Programmatic version of MainWindow (no .ui file)
+ */
+
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
+
+#include "windowEdit/FramelessWindow.h"
+#include <QWidget>
 #include <QMainWindow>
-#include <QTimer>
-#include <opencv2/opencv.hpp>
-#include <opencv2/dnn.hpp>
+#include <QListWidget>
+#include <QStackedWidget>
+#include <QPushButton>
+#include <QLabel>
+#include <QListView>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 
-#include "windowEdit/framelesswindow.h"
-
-QT_BEGIN_NAMESPACE
-namespace Ui { class MainWindow; }
-QT_END_NAMESPACE
-
-class MainWindow : public FramelessWindow {
+class MainWindow : public FramelessWindow
+{
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow();
 
-    private slots:
-        void processFrame();
+private slots:
+    void onModeChanged(int index);
+    void updateMaximizeIcon(bool maxed);
 
 private:
-    Ui::MainWindow *ui;
-    QTimer *timer;
-    cv::VideoCapture camera;
-    cv::dnn::Net net;
-    bool isPaused = true;
-    std::chrono::steady_clock::time_point lastFaceTime, startTime;
-    double recordingSeconds = 0.0;
-    cv::VideoWriter video;
-    void setupTitleBar();
+    // === UI elements ===
+    QWidget* titleBar;
+    QLabel* IconName;
+    QLabel* titleLabel;
+    QPushButton* btnMinimize;
+    QPushButton* btnMaximize;
+    QPushButton* btnClose;
 
-    void updateMaximizeIcon(bool maxed);
-    QString getCurrentTimeString() const;
-    void drawFaces(cv::Mat &frame, const std::vector<cv::Rect> &faces);
+    QListWidget* listModes;
+    QStackedWidget* stackedWidget;
+    QListView* consoleView;
+
+    SnapPreviewWindow* snapPreview;
+
+    // === Setup ===
+    void setupUi();
+    void setupTitleBar();
+    void setupSidebar();
+    void setupConsole();
+    void setupConnections();
 };
 
-#endif //MAINWINDOW_H
+#endif // MAINWINDOW_H

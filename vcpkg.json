@@ -4,6 +4,7 @@
     "qtbase",
     "qtmultimedia",
     "qtsvg",
-    "qttools"
+    "qttools",
+    "qtcharts"
   ]
 }
