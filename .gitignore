@@ -1,9 +1,13 @@
 *.txt
 !CMakeLists.txt
 CMakeLists.txt.user
+CMakeSettings.json
 cmake-build-debug
 build
 .idea
+.vs
+out
+vcpkg_installed
 
 # Prerequisites
 *.d

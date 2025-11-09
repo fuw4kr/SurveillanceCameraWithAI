@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "opencv4",
+    "qtbase",
+    "qtmultimedia",
+    "qtsvg",
+    "qttools"
+  ]
+}
