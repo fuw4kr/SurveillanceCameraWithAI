@@ -1,4 +1,5 @@
-﻿AI_Smart_Surveillance_System/
+﻿```
+AI_Smart_Surveillance_System/
 │
 ├── CMakeLists.txt
 ├── README.md
@@ -72,6 +73,8 @@
     ├── appsettings.json        ← сервер, шляхи, FPS, логування
     ├── supabase.json           ← ключі API (не комітити)
     └── cameras.json            ← список камер (url, id, name)
+
+```
 
 
     Опис головних директорій
