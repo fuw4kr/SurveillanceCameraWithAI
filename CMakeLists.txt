@@ -19,7 +19,15 @@ endif()
 set(OpenCV_ROOT "${VCPKG_INSTALLED_DIR}/x64-windows/share/opencv4")
     find_package(OpenCV REQUIRED)
 
+
 find_package(Qt6 COMPONENTS Widgets Charts Network OpenGL Multimedia Svg REQUIRED)
+
+find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swresample)
+include_directories(${FFMPEG_INCLUDE_DIRS})
+#1> [CMake]   find_package(FFMPEG REQUIRED)
+#1> [CMake]   target_include_directories(main PRIVATE ${FFMPEG_INCLUDE_DIRS})
+#1> [CMake]   target_link_directories(main PRIVATE ${FFMPEG_LIBRARY_DIRS})
+#1> [CMake]   target_link_libraries(main PRIVATE ${FFMPEG_LIBRARIES})
 
 # ======================================================
 # === Файли проєкту
@@ -29,13 +37,27 @@ set(SOURCES
     src/ui/mainwindow.cpp
     src/ui/windowEdit/framelessWindow.cpp
     src/ui/windowEdit/snapPreviewWindow.cpp
- "src/ui/pages/dashboardpage.cpp")
+    src/ui/pages/dashboardpage.cpp
+    src/ui/pages/camerasPage.cpp
+    src/ui/pages/cameraViewWidget.cpp
+
+    
+    src/core/cameraManager.cpp
+    src/core/audioStreamPlayer.cpp
+
+)
 
 set(HEADERS
     src/ui/mainwindow.h
     src/ui/windowEdit/framelessWindow.h
     src/ui/windowEdit/snapPreviewWindow.h
- "src/ui/pages/dashboardpage.h")
+    src/ui/pages/dashboardpage.h
+    src/ui/pages/camerasPage.h
+    
+    src/core/cameraManager.h
+    src/core/audioStreamPlayer.h
+    src/ui/pages/cameraViewWidget.h
+)
 
 # ======================================================
 # === Виконуваний файл
@@ -61,6 +83,13 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 # ======================================================
 # === Лінкування бібліотек
 # ======================================================
+target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+target_link_directories(${PROJECT_NAME} PRIVATE 
+    "${VCPKG_INSTALLED_DIR}/x64-windows/lib"
+    "${VCPKG_INSTALLED_DIR}/x64-windows/debug/lib"
+)
+
+
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
     Qt6::Widgets
@@ -70,6 +99,11 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::OpenGL
     Qt6::Charts
     ${OpenCV_LIBS}
+    ${FFMPEG_LIBRARIES}
+    avcodec
+    avformat
+    avutil
+    swresample
 )
 
 # ======================================================

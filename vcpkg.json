@@ -2,9 +2,10 @@
   "dependencies": [
     "opencv4",
     "qtbase",
+    "qtcharts",
     "qtmultimedia",
     "qtsvg",
     "qttools",
-    "qtcharts"
+    "ffmpeg"
   ]
 }

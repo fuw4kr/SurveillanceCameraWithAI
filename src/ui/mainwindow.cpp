@@ -4,7 +4,6 @@
  */
 
 #include "MainWindow.h"
-#include "pages/dashboardpage.h"
 #include <QApplication>
 #include <QDebug>
 #include <QIcon>
@@ -89,15 +88,20 @@ void MainWindow::setupUi()
 
     stackedWidget = new QStackedWidget;
     stackedWidget->setObjectName("stackedWidget");
+
+    // ==== створюємо сторінки ====
     auto dashboard = new DashboardPage;
-    stackedWidget->addWidget(dashboard); // page 0 - Dashboard
-    stackedWidget->addWidget(new QWidget); // page 1 - Cameras
+    cameraManager = new CameraManager(this);  
+    camerasPage = new CamerasPage(cameraManager, this);
+
+    stackedWidget->addWidget(dashboard);   // page 0 - Dashboard
+    stackedWidget->addWidget(camerasPage); // page 1 - Cameras
     stackedWidget->addWidget(new QWidget); // page 2 - Heatmap
-    stackedWidget->addWidget(new QWidget); // etc.
-    stackedWidget->addWidget(new QWidget);
-    stackedWidget->addWidget(new QWidget);
-    stackedWidget->addWidget(new QWidget);
-    stackedWidget->addWidget(new QWidget);
+    stackedWidget->addWidget(new QWidget); // page 3 - Events
+    stackedWidget->addWidget(new QWidget); // page 4 - 3D Face Viewer
+    stackedWidget->addWidget(new QWidget); // page 5 - AI Analytics
+    stackedWidget->addWidget(new QWidget); // page 6 - Console
+    stackedWidget->addWidget(new QWidget); // page 7 - Settings
 
     centerLayout->addWidget(listModes);
     centerLayout->addWidget(stackedWidget, 1);
@@ -112,7 +116,15 @@ void MainWindow::setupUi()
     mainLayout->addWidget(consoleView);
 
     setCentralWidget(central);
+
+    // ==== сигнал перемикання режимів ====
+    connect(listModes, &QListWidget::currentRowChanged, this, [=](int index) {
+        stackedWidget->setCurrentIndex(index);
+        });
+
+    listModes->setCurrentRow(0);
 }
+
 
 // === Title bar ===
 void MainWindow::setupTitleBar()
