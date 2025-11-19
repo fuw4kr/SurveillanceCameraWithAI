@@ -7,6 +7,9 @@
 #define MAINWINDOW_H
 
 #include "windowEdit/FramelessWindow.h"
+#include "pages/dashboardpage.h"
+#include "pages/CamerasPage.h"
+#include "../core/CameraManager.h"
 #include <QWidget>
 #include <QMainWindow>
 #include <QListWidget>
@@ -43,6 +46,9 @@ private:
     QListView* consoleView;
 
     SnapPreviewWindow* snapPreview;
+
+    CameraManager* cameraManager = nullptr;
+    CamerasPage* camerasPage = nullptr;
 
     // === Setup ===
     void setupUi();

@@ -28,7 +28,7 @@ void DashboardPage::setupUi()
     mainLayout->addWidget(header);
     mainLayout->addSpacing(10);
 
-    // === Cards section (4 в ряд) ===
+    // === Cards section (4 горизонтальні адаптивні) ===
     auto* cardsLayout = new QHBoxLayout;
     cardsLayout->setSpacing(20);
 
@@ -37,12 +37,15 @@ void DashboardPage::setupUi()
     lblAlerts = new QLabel("3");
     lblAIStatus = new QLabel("Active");
 
-    cardsLayout->addWidget(createCard("Active Cameras", lblCameras, QColor("#3B82F6")));
-    cardsLayout->addWidget(createCard("Detections Today", lblDetections, QColor("#10B981")));
-    cardsLayout->addWidget(createCard("Alerts", lblAlerts, QColor("#FACC15")));
-    cardsLayout->addWidget(createCard("AI Engine", lblAIStatus, QColor("#8B5CF6")));
+    cardsLayout->addWidget(createCard("Active Cameras 📷", lblCameras, QColor("#3B82F6")));
+    cardsLayout->addWidget(createCard("Detections Today 👁‍🗨", lblDetections, QColor("#10B981")));
+    cardsLayout->addWidget(createCard("Alerts ⚠️", lblAlerts, QColor("#FACC15")));
+    cardsLayout->addWidget(createCard("AI Engine 🧠", lblAIStatus, QColor("#8B5CF6")));
 
-    mainLayout->addLayout(cardsLayout);   // 🔹 додано один ряд з 4 карток
+    // Додай stretch, щоб розтягувалось гарно по ширині
+    cardsLayout->addStretch();
+
+    mainLayout->addLayout(cardsLayout);
 
     // === Chart ===
     setupChart();
@@ -73,13 +76,15 @@ void DashboardPage::setupUi()
     )");
 }
 
+
 // === Stats Cards ===
 QFrame* DashboardPage::createCard(const QString& title, QLabel* valueLbl, const QColor& color)
 {
     auto* card = new QFrame;
     card->setFrameShape(QFrame::StyledPanel);
-    card->setMinimumSize(200, 120);
-    card->setMaximumWidth(300);
+    card->setMinimumHeight(120);
+    card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // 🔹 тягнеться по ширині
+
     card->setStyleSheet(R"(
         QFrame {
             background-color:#1E1E1E;
