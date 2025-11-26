@@ -1,28 +1,32 @@
 #include "AIProcessor.h"
+#include "AIProcessorONNX.h"
 
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
+#include <QMetaObject>
+#include <QMetaType>
+#include <QMutexLocker>
+#include <QtConcurrent/QtConcurrent>
 #include <QDir>
 #include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QThread>
 #include <algorithm>
+#include <mutex>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/objdetect.hpp>
 #include <opencv2/core/cuda.hpp>
-#include <onnxruntime_c_api.h>
 #ifdef _WIN32
 #include <Windows.h>
 #undef min
 #undef max
 #endif
 #include <cmath>
-#include <string>
-#include <thread>
 
 namespace {
 const cv::Size kDnnInputSize(300, 300);
@@ -30,95 +34,16 @@ const cv::Scalar kMeanValues(104.0, 177.0, 123.0); // commonly used for FaceNet 
 const QString kDefaultEmbeddingsPath = QStringLiteral("config/embeddings.json");
 constexpr int kMaxProcessWidth = 960; // downscale wide frames for faster inference while keeping quality
 
-Ort::Env& ortEnv()
+void configureOpenCvThreading()
 {
-    static Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "ai_processor");
-    return env;
-}
-
-void setPreferredDmlFeatureLevel()
-{
-#ifdef _WIN32
-    // Ask DML EP to cap graphics feature level to 12_0 to avoid 12_1/12_2 negotiations on unstable drivers.
-    qputenv("ORT_DML_PREFERRED_FEATURE_LEVEL", "12_0");
-    qputenv("ORT_DML_REQUIRED_FEATURE_LEVEL", "12_0");
-    // Set extra aliases in case the runtime honors alternative names.
-    qputenv("DML_PREFERRED_FEATURE_LEVEL", "12_0");
-    qputenv("DML_REQUIRED_FEATURE_LEVEL", "12_0");
-    qputenv("ORT_DML_MINIMUM_FEATURE_LEVEL", "12_0");
-#endif
-}
-
-// Ensure feature-level hints are set before any ORT initialization happens.
-const bool kInitDmlFeatureEnv = []() {
-    setPreferredDmlFeatureLevel();
-    return true;
-}();
-
-bool shouldUseDirectML()
-{
-#ifdef _WIN32
-    if (qEnvironmentVariableIsSet("AIP_DISABLE_DML")) {
-        qInfo() << "DirectML disabled via AIP_DISABLE_DML";
-        return false;
-    }
-    // Default: try GPU unless explicitly disabled.
-    return true;
-#else
-    return false;
-#endif
-}
-
-bool tryAppendDml(Ort::SessionOptions& options)
-{
-#ifdef _WIN32
-    setPreferredDmlFeatureLevel();
-
-    // Resolve DirectML EP append symbol dynamically; works only if onnxruntime.dll exports it.
-    HMODULE ortLib = GetModuleHandleW(L"onnxruntime.dll");
-    if (!ortLib) {
-        qWarning() << "ONNX Runtime: onnxruntime.dll not loaded; skipping DirectML";
-        return false;
-    }
-
-    using FnAppendDml = OrtStatus* (ORT_API_CALL*)(OrtSessionOptions* options, uint32_t device_id);
-    const auto fn = reinterpret_cast<FnAppendDml>(GetProcAddress(ortLib, "OrtSessionOptionsAppendExecutionProvider_DML"));
-    if (!fn) {
-        qInfo() << "ONNX Runtime: DirectML EP symbol not found; CPU will be used";
-        return false;
-    }
-
-    QString lastError;
-    constexpr uint32_t kMaxAdapters = 4;
-    for (uint32_t adapterId = 0; adapterId < kMaxAdapters; ++adapterId) {
-        if (OrtStatus* status = fn(options, adapterId)) {
-            const char* msg = Ort::GetApi().GetErrorMessage(status);
-            lastError = QString::fromUtf8(msg ? msg : "");
-            Ort::GetApi().ReleaseStatus(status);
-            continue;
-        }
-        qInfo() << "ONNX Runtime: DirectML execution provider enabled on adapter" << adapterId;
-        return true;
-    }
-
-    qWarning() << "ONNX Runtime: DirectML append failed on adapters 0-" << (kMaxAdapters - 1)
-               << "; CPU will be used:" << lastError;
-    return false;
-#else
-    Q_UNUSED(options);
-    qInfo() << "ONNX Runtime: DirectML not available on this platform";
-    return false;
-#endif
-}
-
-void configureEmbedOptions(Ort::SessionOptions& options, bool enableDml, bool& dmlEnabled)
-{
-    options = Ort::SessionOptions();
-    options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-    // Keep CPU pressure low (temporary mitigation when GPU initialization fails and CPU is used).
-    options.SetIntraOpNumThreads(2);
-    options.SetInterOpNumThreads(1);
-    dmlEnabled = enableDml && tryAppendDml(options);
+    static std::once_flag onceFlag;
+    std::call_once(onceFlag, []() {
+        cv::setUseOptimized(true);
+        int ideal = QThread::idealThreadCount();
+        const int workerThreads = std::max(1, (ideal > 0 ? ideal - 2 : 2));
+        cv::setNumThreads(workerThreads);
+        qInfo() << "OpenCV threads limited to" << workerThreads;
+    });
 }
 
 QString resolvePath(const QString& path)
@@ -189,8 +114,11 @@ ScaledFrame makeScaledFrame(const cv::Mat& frame, int maxWidth)
 AIProcessor::AIProcessor(QObject* parent)
     : QObject(parent)
 {
-    const bool preferDml = shouldUseDirectML();
-    configureEmbedOptions(embedOptions, preferDml, embedUsesDirectML);
+    qRegisterMetaType<Detection>("Detection");
+    qRegisterMetaType<QVector<Detection>>("QVector<Detection>");
+
+    configureOpenCvThreading();
+    embedEngine = std::make_unique<AIProcessorONNX>();
     personHog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());
     loadKnownEmbeddings(kDefaultEmbeddingsPath);
     autoEnrollTimer.start();
@@ -238,11 +166,25 @@ void AIProcessor::setObjectConfidence(float threshold)
     objectThreshold = std::clamp(threshold, 0.05f, 0.99f);
 }
 
+void AIProcessor::setRecognitionIntervalMs(int interval)
+{
+    const int newInterval = std::max(-1, interval);
+    if (recognitionIntervalMs == newInterval)
+        return;
+    recognitionIntervalMs = newInterval;
+    recognitionCacheTtlMs = recognitionIntervalMs > 0
+        ? std::max(recognitionIntervalMs, 100)
+        : 300;
+    if (!isRecognitionRateLimited() && recognitionTimer.isValid())
+        recognitionTimer.invalidate();
+    emit recognitionIntervalChanged(recognitionIntervalMs);
+}
+
 void AIProcessor::resetBackground()
 {
 }
 
-ProcessedFrame AIProcessor::processFrame(const cv::Mat& frame)
+ProcessedFrame AIProcessor::processFrame(const cv::Mat& frame, int cameraId)
 {
     ProcessedFrame result;
     if (frame.empty())
@@ -252,7 +194,7 @@ ProcessedFrame AIProcessor::processFrame(const cv::Mat& frame)
     frame.copyTo(canvas);
 
     QVector<Detection> detections;
-    detections += detectFaces(frame, canvas);
+    detections += detectFaces(frame, canvas, cameraId);
     detections += detectPersons(frame, canvas);
     detections += detectObjects(frame, canvas);
 
@@ -267,80 +209,32 @@ ProcessedFrame AIProcessor::processFrame(const cv::Mat& frame)
 
 bool AIProcessor::loadEmbedModel(const QString& modelPath)
 {
-    auto loadWithOptions = [&](const Ort::SessionOptions& opts) -> bool {
-        const std::wstring wModelPath = modelPath.toStdWString();
-        embedSession.reset(new Ort::Session(ortEnv(), wModelPath.c_str(), opts));
-        return validateEmbedModel(*embedSession);
-    };
-
-    try {
-        // ORT expects wide-char paths on Windows
-        embedModelLoaded = loadWithOptions(embedOptions);
-        if (embedModelLoaded)
-            return true;
-        if (embedUsesDirectML)
-            qWarning() << "Embedding model validation failed on DirectML; trying CPU fallback";
-    } catch (const Ort::Exception& ex) {
-        qWarning() << "Failed to load embedding model:" << ex.what();
-        embedModelLoaded = false;
-        embedSession.reset();
-    }
-
-    if (embedUsesDirectML) {
-        bool dmlEnabled = false;
-        configureEmbedOptions(embedOptions, false, dmlEnabled);
-        embedUsesDirectML = dmlEnabled;
-        try {
-            embedModelLoaded = loadWithOptions(embedOptions);
-            return embedModelLoaded;
-        } catch (const Ort::Exception& ex) {
-            qWarning() << "CPU fallback for embedding model failed:" << ex.what();
-            embedModelLoaded = false;
-            embedSession.reset();
-        }
-    }
-
-    return embedModelLoaded;
+    if (!embedEngine)
+        embedEngine = std::make_unique<AIProcessorONNX>();
+    const bool loaded = embedEngine->loadModel(modelPath);
+    if (!loaded)
+        qWarning() << "Failed to load embedding model from" << modelPath;
+    return loaded;
 }
 
-bool AIProcessor::validateEmbedModel(const Ort::Session& session)
+void AIProcessor::setPreferGpuForEmbeddings(bool enable)
 {
-    Ort::AllocatorWithDefaultOptions alloc;
-    Ort::TypeInfo inputInfo = session.GetInputTypeInfo(0);
-    auto tensorInfo = inputInfo.GetTensorTypeAndShapeInfo();
-    embedInputShape = tensorInfo.GetShape();
-    embedRunShape = embedInputShape;
+    if (!embedEngine)
+        embedEngine = std::make_unique<AIProcessorONNX>();
+    if (embedEngine->prefersOpenVino() == enable)
+        return;
+    embedEngine->setPreferOpenVino(enable);
+    emit embeddingBackendChanged(enable);
+}
 
-    // Resolve dynamic dimensions (-1/0) to 1 so we can submit a concrete tensor shape.
-    for (auto& dim : embedRunShape) {
-        if (dim <= 0)
-            dim = 1;
-    }
+bool AIProcessor::prefersGpuForEmbeddings() const
+{
+    return embedEngine ? embedEngine->prefersOpenVino() : true;
+}
 
-    if (embedInputShape.size() == 4) {
-        // NCHW
-        embedChannels = static_cast<int>(embedInputShape[1]);
-        embedHeight = static_cast<int>(embedInputShape[2]);
-        embedWidth = static_cast<int>(embedInputShape[3]);
-    } else if (embedInputShape.size() == 3) {
-        // HWC
-        embedHeight = static_cast<int>(embedInputShape[0]);
-        embedWidth = static_cast<int>(embedInputShape[1]);
-        embedChannels = static_cast<int>(embedInputShape[2]);
-    } else {
-        qWarning() << "Unexpected embedding input shape";
-        return false;
-    }
-
-    embedTensorSize = 1;
-    for (auto dim : embedRunShape) {
-        if (dim > 0)
-            embedTensorSize *= static_cast<size_t>(dim);
-    }
-
-    embedInputName = session.GetInputNameAllocated(0, alloc).get();
-    embedOutputName = session.GetOutputNameAllocated(0, alloc).get();
-    return true;
+bool AIProcessor::hasEmbedModel() const
+{
+    return embedEngine && embedEngine->isLoaded();
 }
 
 bool AIProcessor::loadKnownEmbeddings(const QString& jsonPath)
@@ -390,6 +284,7 @@ bool AIProcessor::loadKnownEmbeddings(const QString& jsonPath)
 
 void AIProcessor::setKnownEmbeddings(const QVector<LabeledEmbedding>& labeledEmbeddings)
 {
+    QMutexLocker locker(&knownEmbeddingsMutex);
     knownEmbeddings.clear();
     knownEmbeddings.reserve(labeledEmbeddings.size());
     for (const auto& pair : labeledEmbeddings) {
@@ -432,7 +327,7 @@ QString AIProcessor::resolvePreviewPath(const QString& storedPath) const
 
 bool AIProcessor::addKnownEmbedding(const QString& name, const cv::Mat& faceBgr, const QString& savePath)
 {
-    if (!embedModelLoaded || !embedSession) {
+    if (!hasEmbedModel()) {
         qWarning() << "Embedding model not loaded; cannot add embedding for" << name;
         return false;
     }
@@ -451,7 +346,10 @@ bool AIProcessor::addKnownEmbedding(const QString& name, const cv::Mat& faceBgr,
     entry.embedding = emb;
     entry.previewPath = saveFacePreview(entry.name, faceBgr);
     normalizeEmbedding(entry.embedding);
-    knownEmbeddings.push_back(entry);
+    {
+        QMutexLocker locker(&knownEmbeddingsMutex);
+        knownEmbeddings.push_back(entry);
+    }
 
     const QString path = savePath.isEmpty() ? embeddingsPath : savePath;
     if (!persistKnownEmbeddings(path)) {
@@ -461,64 +359,52 @@ bool AIProcessor::addKnownEmbedding(const QString& name, const cv::Mat& faceBgr,
     return true;
 }
 
-bool AIProcessor::preprocessFace(const cv::Mat& face, std::vector<float>& tensor) const
-{
-    if (face.empty() || embedTensorSize == 0)
-        return false;
-
-    cv::Mat rgb;
-    cv::cvtColor(face, rgb, cv::COLOR_BGR2RGB);
-    cv::Mat resized;
-    cv::resize(rgb, resized, cv::Size(embedWidth, embedHeight), 0, 0, cv::INTER_AREA);
-
-    tensor.resize(embedTensorSize);
-    const size_t channelStride = static_cast<size_t>(embedHeight) * embedWidth;
-    for (int y = 0; y < embedHeight; ++y) {
-        const uchar* row = resized.ptr<uchar>(y);
-        for (int x = 0; x < embedWidth; ++x) {
-            for (int c = 0; c < embedChannels; ++c) {
-                const float v = (static_cast<float>(row[x * 3 + c]) - 127.5f) / 128.0f;
-                tensor[c * channelStride + static_cast<size_t>(y) * embedWidth + x] = v;
-            }
-        }
-    }
-    return true;
-}
-
 std::vector<float> AIProcessor::computeEmbedding(const cv::Mat& faceBgr) const
 {
-    if (!embedModelLoaded || !embedSession)
+    if (!embedEngine)
         return {};
+    return embedEngine->computeEmbedding(faceBgr);
+}
 
-    if (!preprocessFace(faceBgr, embedInputBuffer))
-        return {};
-
-    Ort::MemoryInfo memInfo = Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtDeviceAllocator, OrtMemTypeDefault);
-    std::array<const char*, 1> inputNames{ embedInputName.c_str() };
-    std::array<const char*, 1> outputNames{ embedOutputName.c_str() };
-
-    Ort::Value inputTensor = Ort::Value::CreateTensor<float>(
-        memInfo, embedInputBuffer.data(), embedInputBuffer.size(),
-        embedRunShape.data(), embedRunShape.size());
-
-    auto output = embedSession->Run(Ort::RunOptions{ nullptr }, inputNames.data(), &inputTensor, 1, outputNames.data(), 1);
-    if (output.empty() || !output[0].IsTensor())
-        return {};
-
-    float* outData = output[0].GetTensorMutableData<float>();
-    auto outShape = output[0].GetTensorTypeAndShapeInfo().GetShape();
-    size_t outSize = 1;
-    for (auto dim : outShape) {
-        if (dim > 0)
-            outSize *= static_cast<size_t>(dim);
+void AIProcessor::processFrameAsync(int cameraId, const QImage& frame)
+{
+    const QSize frameSize = frame.size();
+    const cv::Mat mat = imageToMat(frame);
+    if (mat.empty()) {
+        emit frameProcessed(cameraId, frame, {}, frameSize);
+        return;
     }
 
-    std::vector<float> embedding(outData, outData + outSize);
-    float norm = 0.0f;
-    for (float v : embedding) norm += v * v;
-    norm = std::sqrt(norm) + 1e-6f;
-    for (float& v : embedding) v /= norm;
-    return embedding;
+    ProcessedFrame processed = processFrame(mat, cameraId);
+    QImage annotated = processed.annotated.empty() ? frame : matToImage(processed.annotated);
+    emit frameProcessed(cameraId, annotated, processed.detections, frameSize);
+}
+
+bool AIProcessor::isRecognitionReady() const
+{
+    if (!hasEmbedModel())
+        return false;
+    if (!isRecognitionRateLimited())
+        return true;
+    if (!recognitionTimer.isValid())
+        return true;
+    return recognitionTimer.hasExpired(recognitionIntervalMs);
+}
+
+bool AIProcessor::claimRecognitionSlot()
+{
+    if (!hasEmbedModel())
+        return false;
+    if (!isRecognitionRateLimited())
+        return true;
+    if (!recognitionTimer.isValid()) {
+        recognitionTimer.start();
+        return true;
+    }
+    if (!recognitionTimer.hasExpired(recognitionIntervalMs))
+        return false;
+    recognitionTimer.restart();
+    return true;
 }
 
 float AIProcessor::cosineSimilarity(const std::vector<float>& a, const std::vector<float>& b) const
@@ -556,8 +442,14 @@ bool AIProcessor::persistKnownEmbeddings(const QString& path) const
     const QString outPath = resolvePath(path);
     QDir().mkpath(QFileInfo(outPath).absolutePath());
 
+    std::vector<LabeledEmbedding> snapshot;
+    {
+        QMutexLocker locker(&knownEmbeddingsMutex);
+        snapshot = knownEmbeddings;
+    }
+
     QJsonArray array;
-    for (const auto& item : knownEmbeddings) {
+    for (const auto& item : snapshot) {
         QJsonObject obj;
         obj.insert(QStringLiteral("name"), item.name);
         QJsonArray embArray;
@@ -578,12 +470,13 @@ bool AIProcessor::persistKnownEmbeddings(const QString& path) const
     return true;
 }
 
-QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canvas)
+QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canvas, int cameraId)
 {
     QVector<Detection> detections;
     if (faceNet.empty())
         return detections;
 
+    const QSize frameSize(frame.cols, frame.rows);
     const ScaledFrame scaled = makeScaledFrame(frame, kMaxProcessWidth);
     const cv::Mat& input = scaled.image;
     const float invScale = scaled.scale > 0.0f ? 1.0f / scaled.scale : 1.0f;
@@ -591,16 +484,6 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
     cv::Mat blob = cv::dnn::blobFromImage(input, 1.0, kDnnInputSize, kMeanValues, false, false);
     faceNet.setInput(blob);
     cv::Mat out = faceNet.forward();
-
-    const auto findPreviewPath = [&](const QString& name) -> QString {
-        if (name.isEmpty())
-            return {};
-        for (const auto& known : knownEmbeddings) {
-            if (known.name.compare(name, Qt::CaseSensitive) == 0)
-                return resolvePreviewPath(known.previewPath);
-        }
-        return {};
-    };
 
     const int detectionsCount = out.size[2];
     for (int i = 0; i < detectionsCount; ++i) {
@@ -627,41 +510,26 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
         detection.color = faceColor;
         QString textLabel = QString("%1 %2%").arg(detection.label).arg(static_cast<int>(confidence * 100));
 
-        if (embedModelLoaded) {
-            const cv::Mat faceRoi = frame(rect).clone();
-            const std::vector<float> probe = computeEmbedding(faceRoi);
-            if (!probe.empty()) {
-                float bestSim = -1.0f;
-                QString bestName;
-                for (const auto& known : knownEmbeddings) {
-                    const float sim = cosineSimilarity(probe, known.embedding);
-                    if (sim > bestSim) {
-                        bestSim = sim;
-                        bestName = known.name;
-                    }
-                }
-                if (bestSim >= recognitionThreshold && !bestName.isEmpty()) {
-                    detection.label = bestName;
-                    detection.category = QStringLiteral("Face");
-                    detection.color = recognizedFaceColor;
-                    detection.previewPath = findPreviewPath(bestName);
-                    textLabel = QString("%1 (%2)").arg(bestName, QString::number(bestSim, 'f', 2));
-                } else if (autoEnrollEnabled && autoEnrollTimer.hasExpired(autoEnrollCooldownMs)) {
-                    // Auto-enroll unknown face
-                    const QString newName = QStringLiteral("Person_%1").arg(knownEmbeddings.size() + 1);
-                    if (addKnownEmbedding(newName, faceRoi)) {
-                        detection.label = newName;
-                        detection.category = QStringLiteral("Face");
-                        detection.color = recognizedFaceColor;
-                        detection.previewPath = findPreviewPath(newName);
-                        textLabel = QString("%1 (enrolled)").arg(newName);
-                        autoEnrollTimer.restart();
-                    } else {
-                        qWarning() << "Auto-enroll failed for face crop; embeddings not updated";
-                    }
-                }
+        const QString cacheKey = detectionCacheKey(cameraId, detection.rect, frameSize);
+        RecognitionCacheEntry cacheEntry;
+        if (tryGetCachedRecognition(cacheKey, cacheEntry)) {
+            if (!cacheEntry.label.isEmpty()) {
+                detection.label = cacheEntry.label;
+                detection.category = QStringLiteral("Face");
+                detection.color = cacheEntry.color;
+                detection.previewPath = resolvePreviewPath(cacheEntry.previewPath);
+                textLabel = cacheEntry.similarity >= 0.0f
+                    ? QString("%1 (%2)").arg(cacheEntry.label, QString::number(cacheEntry.similarity, 'f', 2))
+                    : cacheEntry.label;
+            }
+        } else if (hasEmbedModel()) {
+            const bool allowRecognition = !isRecognitionRateLimited() || isRecognitionReady();
+            if (allowRecognition) {
+                const cv::Mat faceCopy = frame(rect).clone();
+                scheduleEmbeddingJob(cacheKey, faceCopy);
+                textLabel = QStringLiteral("Face (processing)");
             } else {
-                qWarning() << "Embedding computation returned empty vector; model may not be loaded or input invalid";
+                textLabel = QStringLiteral("Face (waiting)");
             }
         }
         detections.append(detection);
@@ -776,4 +644,135 @@ QRect AIProcessor::toRect(const cv::Rect& rect, const cv::Size& bounds)
     const int w = std::clamp(rect.width, 0, bounds.width - x);
     const int h = std::clamp(rect.height, 0, bounds.height - y);
     return QRect(x, y, w, h);
+}
+
+cv::Mat AIProcessor::imageToMat(const QImage& image)
+{
+    if (image.isNull())
+        return {};
+    QImage converted = image.convertToFormat(QImage::Format_RGB888);
+    cv::Mat mat(converted.height(), converted.width(), CV_8UC3,
+        const_cast<uchar*>(converted.bits()), converted.bytesPerLine());
+    cv::Mat bgr;
+    cv::cvtColor(mat, bgr, cv::COLOR_RGB2BGR);
+    return bgr;
+}
+
+QImage AIProcessor::matToImage(const cv::Mat& mat)
+{
+    if (mat.empty())
+        return {};
+    cv::Mat rgb;
+    cv::cvtColor(mat, rgb, cv::COLOR_BGR2RGB);
+    return QImage(rgb.data, rgb.cols, rgb.rows, rgb.step, QImage::Format_RGB888).copy();
+}
+
+QString AIProcessor::detectionCacheKey(int cameraId, const QRect& rect, const QSize& bounds) const
+{
+    if (rect.isEmpty() || bounds.isEmpty())
+        return {};
+
+    const int bucketBase = std::min(bounds.width(), bounds.height()) / 32;
+    const int bucket = std::max(8, bucketBase);
+    const QPoint center = rect.center();
+    const int cx = center.x() / bucket;
+    const int cy = center.y() / bucket;
+    const int w = std::max(1, rect.width() / bucket);
+    const int h = std::max(1, rect.height() / bucket);
+    return QStringLiteral("%1_%2_%3_%4_%5")
+        .arg(cameraId)
+        .arg(cx)
+        .arg(cy)
+        .arg(w)
+        .arg(h);
+}
+
+bool AIProcessor::tryGetCachedRecognition(const QString& key, RecognitionCacheEntry& entry) const
+{
+    QMutexLocker locker(&recognitionCacheMutex);
+    const auto it = recognitionCache.constFind(key);
+    if (it == recognitionCache.constEnd())
+        return false;
+    if (!it->hasResult)
+        return false;
+    if (!it->timer.isValid() || it->timer.elapsed() > recognitionCacheTtlMs)
+        return false;
+    entry = *it;
+    return true;
+}
+
+void AIProcessor::scheduleEmbeddingJob(const QString& key, cv::Mat face)
+{
+    if (face.empty() || !hasEmbedModel())
+        return;
+
+    {
+        QMutexLocker locker(&recognitionCacheMutex);
+        auto& entry = recognitionCache[key];
+        if (entry.pending)
+            return;
+        if (entry.timer.isValid() && entry.timer.elapsed() < recognitionCacheTtlMs)
+            return;
+        entry.pending = true;
+    }
+
+    if (isRecognitionRateLimited()) {
+        if (!recognitionTimer.isValid())
+            recognitionTimer.start();
+        else
+            recognitionTimer.restart();
+    }
+
+    QtConcurrent::run([this, key, face = std::move(face)]() {
+        RecognitionCacheEntry result = runRecognitionTask(face);
+        QMetaObject::invokeMethod(this, [this, key, result]() {
+            completeRecognitionJob(key, result);
+        }, Qt::QueuedConnection);
+    });
+}
+
+AIProcessor::RecognitionCacheEntry AIProcessor::runRecognitionTask(const cv::Mat& face) const
+{
+    RecognitionCacheEntry entry;
+    entry.color = faceColor;
+    entry.hasResult = true;
+    if (face.empty())
+        return entry;
+
+    const std::vector<float> probe = computeEmbedding(face);
+    if (probe.empty())
+        return entry;
+
+    float bestSim = -1.0f;
+    QString bestName;
+    QString previewPath;
+    {
+        QMutexLocker locker(&knownEmbeddingsMutex);
+        for (const auto& known : knownEmbeddings) {
+            const float sim = cosineSimilarity(probe, known.embedding);
+            if (sim > bestSim) {
+                bestSim = sim;
+                bestName = known.name;
+                previewPath = known.previewPath;
+            }
+        }
+    }
+
+    if (bestSim >= recognitionThreshold && !bestName.isEmpty()) {
+        entry.label = bestName;
+        entry.color = recognizedFaceColor;
+        entry.similarity = bestSim;
+        entry.previewPath = previewPath;
+    }
+    return entry;
+}
+
+void AIProcessor::completeRecognitionJob(const QString& key, const RecognitionCacheEntry& entry)
+{
+    QMutexLocker locker(&recognitionCacheMutex);
+    auto& cacheEntry = recognitionCache[key];
+    cacheEntry = entry;
+    cacheEntry.pending = false;
+    cacheEntry.hasResult = true;
+    cacheEntry.timer.restart();
 }

@@ -129,7 +129,7 @@ void AnalyticsPage::handleFrame(int id, const QImage& image)
     if (mat.empty())
         return;
 
-    ProcessedFrame processed = aiProcessor->processFrame(mat);
+    ProcessedFrame processed = aiProcessor->processFrame(mat, id);
     if (!processed.annotated.empty()) {
         const QImage annotated = matToImage(processed.annotated);
         previewLabel->setPixmap(QPixmap::fromImage(annotated).scaled(

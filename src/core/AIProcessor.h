@@ -7,14 +7,20 @@
 #include <QString>
 #include <QColor>
 #include <QElapsedTimer>
+#include <QMetaType>
+#include <QImage>
+#include <QSize>
+#include <QMutex>
+#include <QHash>
 
-#include <onnxruntime_cxx_api.h>
 #include <memory>
 #include <vector>
 
 #include <opencv2/core.hpp>
 #include <opencv2/dnn.hpp>
 #include <opencv2/objdetect.hpp>
+
+class AIProcessorONNX;
 
 struct Detection
 {
@@ -32,6 +38,9 @@ struct ProcessedFrame
     QVector<Detection> detections;
 };
 
+Q_DECLARE_METATYPE(Detection)
+Q_DECLARE_METATYPE(QVector<Detection>)
+
 /**
  * @brief AIProcessor runs lightweight analytics (face/object/person detection).
  * It is designed as a reusable component that takes cv::Mat frames and annotates them.
@@ -46,20 +55,33 @@ public:
 
     bool loadFaceModel(const QString& modelPath, const QString& configPath = QString());
     bool loadObjectModel(const QString& modelPath, const QString& configPath = QString());
-    void setFaceConfidence(float threshold);
-    void setObjectConfidence(float threshold);
+    int recognitionInterval() const { return recognitionIntervalMs; }
     void resetBackground();
     bool loadKnownEmbeddings(const QString& jsonPath); // e.g. config/embeddings.json
     bool addKnownEmbedding(const QString& name, const cv::Mat& faceBgr, const QString& savePath = QString());
 
+    bool prefersGpuForEmbeddings() const;
     bool loadEmbedModel(const QString& modelPath);
-    bool hasEmbedModel() const { return embedModelLoaded; }
+    bool hasEmbedModel() const;
     std::vector<float> computeEmbedding(const cv::Mat& faceBgr) const;
 
-    ProcessedFrame processFrame(const cv::Mat& frame);
+    ProcessedFrame processFrame(const cv::Mat& frame, int cameraId = -1);
+
+public slots:
+    void setFaceConfidence(float threshold);
+    void setObjectConfidence(float threshold);
+    void setRecognitionIntervalMs(int intervalMs);
+    void setPreferGpuForEmbeddings(bool enable);
+    void processFrameAsync(int cameraId, const QImage& frame);
+    void loadEmbedModelAsync(const QString& modelPath) { loadEmbedModel(modelPath); }
+    void loadFaceModelAsync(const QString& modelPath, const QString& configPath = QString()) { loadFaceModel(modelPath, configPath); }
+    void loadObjectModelAsync(const QString& modelPath, const QString& configPath = QString()) { loadObjectModel(modelPath, configPath); }
 
 signals:
     void detectionsReady(const QVector<Detection>& detections);
+    void frameProcessed(int cameraId, const QImage& annotated, const QVector<Detection>& detections, const QSize& sourceSize);
+    void recognitionIntervalChanged(int intervalMs);
+    void embeddingBackendChanged(bool preferGpu);
 
 private:
     struct LabeledEmbedding {
@@ -68,11 +90,22 @@ private:
         QString previewPath;
     };
 
-    QVector<Detection> detectFaces(const cv::Mat& frame, cv::Mat& canvas);
+    struct RecognitionCacheEntry {
+        QString label;
+        QString previewPath;
+        QColor color = QColor(79, 70, 229);
+        float similarity = -1.0f;
+        QElapsedTimer timer;
+        bool pending = false;
+        bool hasResult = false;
+    };
+
+    QVector<Detection> detectFaces(const cv::Mat& frame, cv::Mat& canvas, int cameraId);
     QVector<Detection> detectObjects(const cv::Mat& frame, cv::Mat& canvas);
     QVector<Detection> detectPersons(const cv::Mat& frame, cv::Mat& canvas);
-    bool preprocessFace(const cv::Mat& face, std::vector<float>& tensor) const;
-    bool validateEmbedModel(const Ort::Session& session);
+    bool claimRecognitionSlot();
+    bool isRecognitionReady() const;
+    bool isRecognitionRateLimited() const { return recognitionIntervalMs > 0; }
     float cosineSimilarity(const std::vector<float>& a, const std::vector<float>& b) const;
     static void normalizeEmbedding(std::vector<float>& embedding);
     bool persistKnownEmbeddings(const QString& path) const;
@@ -82,6 +115,13 @@ private:
 
     static cv::Scalar toScalar(const QColor& color);
     static QRect toRect(const cv::Rect& rect, const cv::Size& bounds);
+    static cv::Mat imageToMat(const QImage& image);
+    static QImage matToImage(const cv::Mat& mat);
+    QString detectionCacheKey(int cameraId, const QRect& rect, const QSize& bounds) const;
+    bool tryGetCachedRecognition(const QString& key, RecognitionCacheEntry& entry) const;
+    void scheduleEmbeddingJob(const QString& key, cv::Mat face);
+    void completeRecognitionJob(const QString& key, const RecognitionCacheEntry& entry);
+    RecognitionCacheEntry runRecognitionTask(const cv::Mat& face) const;
 
     cv::dnn::Net faceNet;
     cv::dnn::Net objectNet;
@@ -97,19 +137,7 @@ private:
     float recognitionThreshold = 0.38f; // cosine similarity threshold for a match
 
     // ONNX Runtime embedding model (ArcFace/MobileFaceNet/SFace/FaceNet)
-    bool embedModelLoaded = false;
-    bool embedUsesDirectML = false;
-    std::unique_ptr<Ort::Session> embedSession;
-    Ort::SessionOptions embedOptions;
-    std::string embedInputName;
-    std::string embedOutputName;
-    std::vector<int64_t> embedInputShape;
-    std::vector<int64_t> embedRunShape; // input shape with dynamic dims resolved to 1 for feeding tensors
-    size_t embedTensorSize = 0;
-    int embedChannels = 3;
-    int embedHeight = 112;
-    int embedWidth = 112;
-    mutable std::vector<float> embedInputBuffer;
+    std::unique_ptr<AIProcessorONNX> embedEngine;
     std::vector<LabeledEmbedding> knownEmbeddings;
     QString embeddingsPath = QStringLiteral("config/embeddings.json");
 
@@ -117,6 +145,13 @@ private:
     bool autoEnrollEnabled = true;
     int autoEnrollCooldownMs = 2000;
     QElapsedTimer autoEnrollTimer;
+    int recognitionIntervalMs = 500;
+    mutable QElapsedTimer recognitionTimer;
+    int recognitionCacheTtlMs = 500;
+    mutable QMutex embeddingMutex;
+    mutable QMutex knownEmbeddingsMutex;
+    mutable QMutex recognitionCacheMutex;
+    QHash<QString, RecognitionCacheEntry> recognitionCache;
 };
 
 #endif // AIPROCESSOR_H
