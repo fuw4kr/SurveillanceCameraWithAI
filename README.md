@@ -1,4 +1,4 @@
-﻿```
+```
 AI_Smart_Surveillance_System/
 │
 ├── CMakeLists.txt
@@ -117,3 +117,10 @@ QSS — підключається в main.cpp або в MainWindow.
 Іконки SVG — кладеш у icons/ і підключаєш через ":/icons/name.svg".
 
 Все, що не відображається — поза ui.
+## OpenVINO Execution Provider
+
+- The build fetches the Intel.ML.OnnxRuntime.OpenVino 1.23.0 NuGet package and copies all required onnxruntime/openvino DLLs next to the executable.
+- OpenVINO GPU inference is enabled on Windows by default. Override the target with the AIP_OPENVINO_DEVICE env variable (e.g., GPU_FP16, GPU_FP32, CPU_FP32).
+- Set AIP_DISABLE_OPENVINO=1 to force the CPU path if the Intel GPU drivers or OpenVINO runtime are unavailable.
+
+

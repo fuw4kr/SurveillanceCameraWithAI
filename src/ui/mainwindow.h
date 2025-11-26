@@ -10,6 +10,7 @@
 #include "pages/dashboardpage.h"
 #include "pages/CamerasPage.h"
 #include "../core/CameraManager.h"
+#include "../core/AIProcessor.h"
 #include <QWidget>
 #include <QMainWindow>
 #include <QListWidget>
@@ -19,6 +20,11 @@
 #include <QListView>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QSlider>
+#include <QCheckBox>
+#include <QString>
+#include <QThread>
+#include <QMetaObject>
 
 class MainWindow : public FramelessWindow
 {
@@ -31,6 +37,9 @@ public:
 private slots:
     void onModeChanged(int index);
     void updateMaximizeIcon(bool maxed);
+    void toggleSettingsPopup();
+    void handleRecognitionSlider(int value);
+    void handleGpuToggle(bool checked);
 
 private:
     // === UI elements ===
@@ -40,6 +49,7 @@ private:
     QPushButton* btnMinimize;
     QPushButton* btnMaximize;
     QPushButton* btnClose;
+    QPushButton* btnSettings;
 
     QListWidget* listModes;
     QStackedWidget* stackedWidget;
@@ -47,12 +57,24 @@ private:
 
     SnapPreviewWindow* snapPreview;
 
+    QWidget* settingsPopup = nullptr;
+    QSlider* recognitionSlider = nullptr;
+    QLabel* recognitionValueLabel = nullptr;
+    QCheckBox* gpuToggle = nullptr;
+
     CameraManager* cameraManager = nullptr;
+    AIProcessor* aiProcessor = nullptr;
     CamerasPage* camerasPage = nullptr;
+    QString embedModelPath;
+    QThread* aiThread = nullptr;
+    int cachedRecognitionInterval = 500;
+    bool cachedGpuPreference = true;
 
     // === Setup ===
     void setupUi();
     void setupTitleBar();
+    void setupSettingsPopup();
+    void refreshSettingsUi();
     void setupSidebar();
     void setupConsole();
     void setupConnections();

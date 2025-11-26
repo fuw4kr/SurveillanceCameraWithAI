@@ -8,6 +8,7 @@ build
 .vs
 out
 vcpkg_installed
+assets/models
 
 # Prerequisites
 *.d

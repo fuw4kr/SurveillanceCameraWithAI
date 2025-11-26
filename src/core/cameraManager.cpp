@@ -114,6 +114,7 @@ bool CameraManager::isCameraOpen(int id) const
 void CameraManager::captureLoop(int id)
 {
     cv::Mat frame;
+    cv::Mat scaled;
 
     while (true) {
         {
@@ -128,7 +129,16 @@ void CameraManager::captureLoop(int id)
         stream->cap >> frame;
         if (frame.empty()) continue;
 
-        QImage img = matToQImage(frame);
+        const int targetHeight = 720;
+        if (frame.rows > targetHeight) {
+            const double scale = static_cast<double>(targetHeight) / static_cast<double>(frame.rows);
+            const int targetWidth = static_cast<int>(frame.cols * scale);
+            cv::resize(frame, scaled, cv::Size(targetWidth, targetHeight), 0, 0, cv::INTER_AREA);
+        } else {
+            scaled = frame;
+        }
+
+        QImage img = matToQImage(scaled);
         emit frameReady(id, img);
 
         QThread::msleep(33); // ~30 FPS
