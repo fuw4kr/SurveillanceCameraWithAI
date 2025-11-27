@@ -22,11 +22,21 @@ jobs:
           runVcpkgInstall: true
           vcpkgJsonGlob: '**/vcpkg.json'
 
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
       - name: Configure CMake
-        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows -G "Ninja"
+        shell: pwsh
+        run: >
+          cmake -B build -S .
+          -DCMAKE_BUILD_TYPE=$env:BUILD_TYPE
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows
+          -G Ninja
 
       - name: Build
-        run: cmake --build build --config %BUILD_TYPE%
+        shell: pwsh
+        run: cmake --build build --config $env:BUILD_TYPE
 
       - name: Package artifact
         shell: pwsh
