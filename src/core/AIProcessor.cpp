@@ -15,6 +15,8 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QThread>
+#include <QUuid>
+#include <QSet>
 #include <algorithm>
 #include <mutex>
 #include <opencv2/imgproc.hpp>
@@ -116,6 +118,8 @@ AIProcessor::AIProcessor(QObject* parent)
 {
     qRegisterMetaType<Detection>("Detection");
     qRegisterMetaType<QVector<Detection>>("QVector<Detection>");
+    qRegisterMetaType<FaceProfile>("AIProcessor::FaceProfile");
+    qRegisterMetaType<QVector<FaceProfile>>("QVector<AIProcessor::FaceProfile>");
 
     configureOpenCvThreading();
     embedEngine = std::make_unique<AIProcessorONNX>();
@@ -260,9 +264,11 @@ bool AIProcessor::loadKnownEmbeddings(const QString& jsonPath)
         if (!value.isObject())
             continue;
         const auto obj = value.toObject();
+        const QString id = obj.value(QStringLiteral("id")).toString();
         const QString name = obj.value(QStringLiteral("name")).toString();
         const auto embArray = obj.value(QStringLiteral("embedding")).toArray();
         const QString imagePath = obj.value(QStringLiteral("image")).toString();
+        const int samples = obj.value(QStringLiteral("samples")).toInt(1);
         if (name.isEmpty() || embArray.isEmpty())
             continue;
 
@@ -272,13 +278,17 @@ bool AIProcessor::loadKnownEmbeddings(const QString& jsonPath)
             emb.push_back(static_cast<float>(v.toDouble()));
         }
         LabeledEmbedding entry;
+        entry.id = id;
         entry.name = name;
         entry.embedding = std::move(emb);
         entry.previewPath = imagePath;
+        entry.sampleCount = std::max(1, samples);
         items.append(entry);
     }
 
     setKnownEmbeddings(items);
+    invalidateRecognitionCache();
+    emit faceDatabaseChanged();
     return !knownEmbeddings.empty();
 }
 
@@ -288,7 +298,10 @@ void AIProcessor::setKnownEmbeddings(const QVector<LabeledEmbedding>& labeledEmb
     knownEmbeddings.clear();
     knownEmbeddings.reserve(labeledEmbeddings.size());
     for (const auto& pair : labeledEmbeddings) {
-        LabeledEmbedding entry{ pair.name, pair.embedding, pair.previewPath };
+        LabeledEmbedding entry = pair;
+        if (entry.id.isEmpty())
+            entry.id = generateFaceId();
+        entry.sampleCount = std::max(1, entry.sampleCount);
         normalizeEmbedding(entry.embedding);
         knownEmbeddings.push_back(std::move(entry));
     }
@@ -325,6 +338,32 @@ QString AIProcessor::resolvePreviewPath(const QString& storedPath) const
     return QFileInfo::exists(absPath) ? absPath : QString();
 }
 
+QString AIProcessor::generateFaceId()
+{
+    return QUuid::createUuid().toString(QUuid::WithoutBraces);
+}
+
+void AIProcessor::invalidateRecognitionCache()
+{
+    QMutexLocker locker(&recognitionCacheMutex);
+    recognitionCache.clear();
+}
+
+bool AIProcessor::removeFacePreviewFile(const QString& storedPath) const
+{
+    if (storedPath.isEmpty())
+        return true;
+    const QString absPath = resolvePath(storedPath);
+    if (!QFileInfo::exists(absPath))
+        return true;
+    QFile file(absPath);
+    if (!file.remove()) {
+        qWarning() << "Failed to remove face preview at" << absPath << file.errorString();
+        return false;
+    }
+    return true;
+}
+
 bool AIProcessor::addKnownEmbedding(const QString& name, const cv::Mat& faceBgr, const QString& savePath)
 {
     if (!hasEmbedModel()) {
@@ -342,9 +381,11 @@ bool AIProcessor::addKnownEmbedding(const QString& name, const cv::Mat& faceBgr,
     }
 
     LabeledEmbedding entry;
+    entry.id = generateFaceId();
     entry.name = name.trimmed();
     entry.embedding = emb;
     entry.previewPath = saveFacePreview(entry.name, faceBgr);
+    entry.sampleCount = 1;
     normalizeEmbedding(entry.embedding);
     {
         QMutexLocker locker(&knownEmbeddingsMutex);
@@ -356,6 +397,8 @@ bool AIProcessor::addKnownEmbedding(const QString& name, const cv::Mat& faceBgr,
         qWarning() << "Failed to persist embeddings to" << path;
         return false;
     }
+    invalidateRecognitionCache();
+    emit faceDatabaseChanged();
     return true;
 }
 
@@ -364,6 +407,182 @@ std::vector<float> AIProcessor::computeEmbedding(const cv::Mat& faceBgr) const
     if (!embedEngine)
         return {};
     return embedEngine->computeEmbedding(faceBgr);
+}
+
+QVector<AIProcessor::FaceProfile> AIProcessor::listFaceProfiles() const
+{
+    QVector<FaceProfile> profiles;
+    QMutexLocker locker(&knownEmbeddingsMutex);
+    profiles.reserve(static_cast<int>(knownEmbeddings.size()));
+    for (const auto& entry : knownEmbeddings) {
+        FaceProfile profile;
+        profile.id = entry.id;
+        profile.name = entry.name;
+        profile.sampleCount = std::max(1, entry.sampleCount);
+        profile.previewPath = resolvePreviewPath(entry.previewPath);
+        profiles.append(profile);
+    }
+    return profiles;
+}
+
+bool AIProcessor::renameFaceProfile(const QString& id, const QString& newName)
+{
+    const QString trimmed = newName.trimmed();
+    if (id.isEmpty() || trimmed.isEmpty())
+        return false;
+
+    {
+        QMutexLocker locker(&knownEmbeddingsMutex);
+        auto it = std::find_if(knownEmbeddings.begin(), knownEmbeddings.end(),
+            [&](const LabeledEmbedding& entry) { return entry.id == id; });
+        if (it == knownEmbeddings.end())
+            return false;
+        if (it->name == trimmed)
+            return true;
+        it->name = trimmed;
+    }
+
+    if (!persistKnownEmbeddings(embeddingsPath)) {
+        loadKnownEmbeddings(embeddingsPath);
+        return false;
+    }
+    invalidateRecognitionCache();
+    emit faceDatabaseChanged();
+    return true;
+}
+
+bool AIProcessor::deleteFaceProfile(const QString& id)
+{
+    if (id.isEmpty())
+        return false;
+
+    QString previewPath;
+    bool allowPreviewRemoval = false;
+    {
+        QMutexLocker locker(&knownEmbeddingsMutex);
+        auto it = std::find_if(knownEmbeddings.begin(), knownEmbeddings.end(),
+            [&](const LabeledEmbedding& entry) { return entry.id == id; });
+        if (it == knownEmbeddings.end())
+            return false;
+        previewPath = it->previewPath;
+        knownEmbeddings.erase(it);
+        if (!previewPath.isEmpty()) {
+            allowPreviewRemoval = std::none_of(knownEmbeddings.begin(), knownEmbeddings.end(),
+                [&](const LabeledEmbedding& entry) { return entry.previewPath == previewPath; });
+        }
+    }
+
+    if (!persistKnownEmbeddings(embeddingsPath)) {
+        loadKnownEmbeddings(embeddingsPath);
+        return false;
+    }
+    if (allowPreviewRemoval)
+        removeFacePreviewFile(previewPath);
+    invalidateRecognitionCache();
+    emit faceDatabaseChanged();
+    return true;
+}
+
+bool AIProcessor::mergeFaceProfiles(const QString& targetId, const QStringList& duplicateIds)
+{
+    if (targetId.isEmpty() || duplicateIds.isEmpty())
+        return false;
+
+    QSet<QString> uniqueIds;
+    for (const auto& id : duplicateIds) {
+        if (id.isEmpty() || id == targetId)
+            continue;
+        uniqueIds.insert(id);
+    }
+    if (uniqueIds.isEmpty())
+        return false;
+
+    QVector<int> removalIndices;
+    QStringList previewPathsToConsider;
+    QStringList previewPathsToDelete;
+    bool merged = false;
+
+    {
+        QMutexLocker locker(&knownEmbeddingsMutex);
+        int targetIndex = -1;
+        for (int i = 0; i < static_cast<int>(knownEmbeddings.size()); ++i) {
+            if (knownEmbeddings[i].id == targetId) {
+                targetIndex = i;
+                break;
+            }
+        }
+        if (targetIndex < 0)
+            return false;
+
+        LabeledEmbedding& target = knownEmbeddings[targetIndex];
+        const size_t embSize = target.embedding.size();
+        if (embSize == 0)
+            return false;
+
+        double totalSamples = std::max(1, target.sampleCount);
+        std::vector<double> accumulator(embSize, 0.0);
+        for (size_t i = 0; i < embSize; ++i)
+            accumulator[i] = static_cast<double>(target.embedding[i]) * totalSamples;
+
+        for (int i = 0; i < static_cast<int>(knownEmbeddings.size()); ++i) {
+            const LabeledEmbedding& candidate = knownEmbeddings[i];
+            if (!uniqueIds.contains(candidate.id))
+                continue;
+            if (candidate.embedding.size() != embSize)
+                continue;
+
+            const int samples = std::max(1, candidate.sampleCount);
+            for (size_t j = 0; j < embSize; ++j)
+                accumulator[j] += static_cast<double>(candidate.embedding[j]) * samples;
+            totalSamples += samples;
+
+            if (target.previewPath.isEmpty() && !candidate.previewPath.isEmpty()) {
+                target.previewPath = candidate.previewPath;
+            } else if (!candidate.previewPath.isEmpty() && candidate.previewPath != target.previewPath) {
+                previewPathsToConsider.append(candidate.previewPath);
+            }
+
+            removalIndices.append(i);
+            merged = true;
+        }
+
+        if (!merged)
+            return false;
+
+        target.sampleCount = static_cast<int>(totalSamples);
+        for (size_t i = 0; i < embSize; ++i)
+            target.embedding[i] = static_cast<float>(accumulator[i] / totalSamples);
+        normalizeEmbedding(target.embedding);
+
+        std::sort(removalIndices.begin(), removalIndices.end(),
+            [](int a, int b) { return a > b; });
+        for (int index : removalIndices) {
+            if (index == targetIndex)
+                continue;
+            if (index < 0 || index >= static_cast<int>(knownEmbeddings.size()))
+                continue;
+            if (index < targetIndex)
+                --targetIndex;
+            knownEmbeddings.erase(knownEmbeddings.begin() + index);
+        }
+
+        for (const QString& path : previewPathsToConsider) {
+            const bool stillUsed = std::any_of(knownEmbeddings.begin(), knownEmbeddings.end(),
+                [&](const LabeledEmbedding& entry) { return entry.previewPath == path; });
+            if (!stillUsed)
+                previewPathsToDelete.append(path);
+        }
+    }
+
+    if (!persistKnownEmbeddings(embeddingsPath)) {
+        loadKnownEmbeddings(embeddingsPath);
+        return false;
+    }
+    for (const QString& path : previewPathsToDelete)
+        removeFacePreviewFile(path);
+    invalidateRecognitionCache();
+    emit faceDatabaseChanged();
+    return true;
 }
 
 void AIProcessor::processFrameAsync(int cameraId, const QImage& frame)
@@ -451,6 +670,8 @@ bool AIProcessor::persistKnownEmbeddings(const QString& path) const
     QJsonArray array;
     for (const auto& item : snapshot) {
         QJsonObject obj;
+        if (!item.id.isEmpty())
+            obj.insert(QStringLiteral("id"), item.id);
         obj.insert(QStringLiteral("name"), item.name);
         QJsonArray embArray;
         for (float v : item.embedding)
@@ -458,6 +679,7 @@ bool AIProcessor::persistKnownEmbeddings(const QString& path) const
         obj.insert(QStringLiteral("embedding"), embArray);
         if (!item.previewPath.isEmpty())
             obj.insert(QStringLiteral("image"), item.previewPath);
+        obj.insert(QStringLiteral("samples"), std::max(1, item.sampleCount));
         array.append(obj);
     }
 

@@ -12,6 +12,7 @@
 #include <QSize>
 #include <QMutex>
 #include <QHash>
+#include <QStringList>
 
 #include <memory>
 #include <vector>
@@ -53,6 +54,13 @@ class AIProcessor : public QObject
 public:
     explicit AIProcessor(QObject* parent = nullptr);
 
+    struct FaceProfile {
+        QString id;
+        QString name;
+        QString previewPath; // resolved absolute path if available
+        int sampleCount = 1;
+    };
+
     bool loadFaceModel(const QString& modelPath, const QString& configPath = QString());
     bool loadObjectModel(const QString& modelPath, const QString& configPath = QString());
     int recognitionInterval() const { return recognitionIntervalMs; }
@@ -66,6 +74,10 @@ public:
     std::vector<float> computeEmbedding(const cv::Mat& faceBgr) const;
 
     ProcessedFrame processFrame(const cv::Mat& frame, int cameraId = -1);
+    Q_INVOKABLE QVector<FaceProfile> listFaceProfiles() const;
+    Q_INVOKABLE bool renameFaceProfile(const QString& id, const QString& newName);
+    Q_INVOKABLE bool deleteFaceProfile(const QString& id);
+    Q_INVOKABLE bool mergeFaceProfiles(const QString& targetId, const QStringList& duplicateIds);
 
 public slots:
     void setFaceConfidence(float threshold);
@@ -82,12 +94,15 @@ signals:
     void frameProcessed(int cameraId, const QImage& annotated, const QVector<Detection>& detections, const QSize& sourceSize);
     void recognitionIntervalChanged(int intervalMs);
     void embeddingBackendChanged(bool preferGpu);
+    void faceDatabaseChanged();
 
 private:
     struct LabeledEmbedding {
+        QString id;
         QString name;
         std::vector<float> embedding;
         QString previewPath;
+        int sampleCount = 1;
     };
 
     struct RecognitionCacheEntry {
@@ -112,6 +127,9 @@ private:
     void setKnownEmbeddings(const QVector<LabeledEmbedding>& labeledEmbeddings);
     QString saveFacePreview(const QString& name, const cv::Mat& faceBgr) const;
     QString resolvePreviewPath(const QString& storedPath) const;
+    static QString generateFaceId();
+    void invalidateRecognitionCache();
+    bool removeFacePreviewFile(const QString& storedPath) const;
 
     static cv::Scalar toScalar(const QColor& color);
     static QRect toRect(const cv::Rect& rect, const cv::Size& bounds);
@@ -153,5 +171,8 @@ private:
     mutable QMutex recognitionCacheMutex;
     QHash<QString, RecognitionCacheEntry> recognitionCache;
 };
+
+Q_DECLARE_METATYPE(AIProcessor::FaceProfile)
+Q_DECLARE_METATYPE(QVector<AIProcessor::FaceProfile>)
 
 #endif // AIPROCESSOR_H

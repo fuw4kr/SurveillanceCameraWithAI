@@ -9,6 +9,8 @@
 #include "windowEdit/FramelessWindow.h"
 #include "pages/dashboardpage.h"
 #include "pages/CamerasPage.h"
+#include "pages/analyticsPage.h"
+#include "pages/faceDatabasePage.h"
 #include "../core/CameraManager.h"
 #include "../core/AIProcessor.h"
 #include <QWidget>
@@ -65,6 +67,8 @@ private:
     CameraManager* cameraManager = nullptr;
     AIProcessor* aiProcessor = nullptr;
     CamerasPage* camerasPage = nullptr;
+    AnalyticsPage* analyticsPage = nullptr;
+    FaceDatabasePage* faceDbPage = nullptr;
     QString embedModelPath;
     QThread* aiThread = nullptr;
     int cachedRecognitionInterval = 500;

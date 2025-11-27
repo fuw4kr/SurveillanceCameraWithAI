@@ -118,6 +118,8 @@ set(SOURCES
     src/ui/windowEdit/snapPreviewWindow.cpp
     src/ui/pages/dashboardpage.cpp
     src/ui/pages/camerasPage.cpp
+    src/ui/pages/analyticsPage.cpp
+    src/ui/pages/faceDatabasePage.cpp
     src/ui/widgets/cameraViewWidget.cpp
 
     
@@ -134,6 +136,8 @@ set(HEADERS
     src/ui/windowEdit/snapPreviewWindow.h
     src/ui/pages/dashboardpage.h
     src/ui/pages/camerasPage.h
+    src/ui/pages/analyticsPage.h
+    src/ui/pages/faceDatabasePage.h
     
     src/core/cameraManager.h
     src/core/AIProcessor.h
