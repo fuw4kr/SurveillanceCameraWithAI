@@ -9,6 +9,8 @@
 #include <QPixmap>
 #include <QIcon>
 #include <QSignalBlocker>
+#include <QScrollArea>
+#include <QFrame>
 #include <QtCharts/QLegend>
 
 #include <QtMath>
@@ -45,7 +47,19 @@ AnalyticsPage::AnalyticsPage(CameraManager* manager, AIProcessor* processor, QWi
 
 void AnalyticsPage::buildUi()
 {
-    auto* layout = new QVBoxLayout(this);
+    auto* outerLayout = new QVBoxLayout(this);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+    outerLayout->setSpacing(0);
+
+    auto* scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    outerLayout->addWidget(scrollArea);
+
+    QWidget* content = new QWidget;
+    scrollArea->setWidget(content);
+
+    auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(16, 16, 16, 16);
     layout->setSpacing(16);
 
@@ -95,6 +109,7 @@ void AnalyticsPage::buildUi()
     layout->addLayout(cardLayout);
 
     activityChartView = new QChartView(this);
+    activityChartView->setMinimumHeight(320);
     activityChart = new QChart;
     activitySeries = new QBarSeries(this);
     todaySet = new QBarSet(tr("Поточний день"));
@@ -105,6 +120,7 @@ void AnalyticsPage::buildUi()
     activityChart->setAnimationOptions(QChart::SeriesAnimations);
     activityChart->setTitle(tr("Графік активності по годинах"));
     activityChart->legend()->setAlignment(Qt::AlignBottom);
+    activityChart->setMargins(QMargins(8, 16, 8, 8));
 
     QStringList hours;
     for (int h = 0; h < 24; ++h)
@@ -123,6 +139,7 @@ void AnalyticsPage::buildUi()
     activityChartView->setRenderHint(QPainter::Antialiasing);
 
     cohortChartView = new QChartView(this);
+    cohortChartView->setMinimumHeight(320);
     cohortChart = new QChart;
     cohortSeries = new QPieSeries(this);
     cohortChart->addSeries(cohortSeries);
@@ -135,7 +152,7 @@ void AnalyticsPage::buildUi()
     chartsLayout->setSpacing(12);
     chartsLayout->addWidget(activityChartView, 2);
     chartsLayout->addWidget(cohortChartView, 1);
-    layout->addLayout(chartsLayout, 1);
+    layout->addLayout(chartsLayout);
 
     auto* tableHeader = new QLabel(tr("Облік робочого часу"));
     tableHeader->setStyleSheet("font-weight:600; font-size:16px;");

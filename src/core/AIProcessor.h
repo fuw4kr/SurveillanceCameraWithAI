@@ -13,6 +13,7 @@
 #include <QMutex>
 #include <QHash>
 #include <QStringList>
+#include <QSet>
 
 #include <memory>
 #include <vector>
@@ -128,6 +129,8 @@ private:
     QString saveFacePreview(const QString& name, const cv::Mat& faceBgr) const;
     QString resolvePreviewPath(const QString& storedPath) const;
     static QString generateFaceId();
+    bool storeEmbeddingEntry(const QString& name, std::vector<float> embedding, const QString& previewPath, const QString& savePath = QString());
+    QString makeAutoLabel();
     void invalidateRecognitionCache();
     bool removeFacePreviewFile(const QString& storedPath) const;
 
@@ -140,6 +143,11 @@ private:
     void scheduleEmbeddingJob(const QString& key, cv::Mat face);
     void completeRecognitionJob(const QString& key, const RecognitionCacheEntry& entry);
     RecognitionCacheEntry runRecognitionTask(const cv::Mat& face) const;
+    QVector<Detection> stabilizeFaces(const QVector<Detection>& rawDetections, const QVector<cv::Mat>& faceCrops, int cameraId);
+    struct FaceTrack;
+    void applyTrackLabel(FaceTrack& track, const QString& newLabel, float similarity, const QString& previewPath);
+    QVector<int> runAssignment(const QVector<QVector<float>>& similarityMatrix) const;
+    float intersectionOverUnion(const QRect& a, const QRect& b) const;
 
     cv::dnn::Net faceNet;
     cv::dnn::Net objectNet;
@@ -163,6 +171,7 @@ private:
     bool autoEnrollEnabled = true;
     int autoEnrollCooldownMs = 2000;
     QElapsedTimer autoEnrollTimer;
+    int autoEnrollCounter = 1;
     int recognitionIntervalMs = 500;
     mutable QElapsedTimer recognitionTimer;
     int recognitionCacheTtlMs = 500;
@@ -170,6 +179,25 @@ private:
     mutable QMutex knownEmbeddingsMutex;
     mutable QMutex recognitionCacheMutex;
     QHash<QString, RecognitionCacheEntry> recognitionCache;
+    struct FaceTrack {
+        quint64 id = 0;
+        QRect rect;
+        QString stableLabel;
+        QString candidateLabel;
+        int candidateCount = 0;
+        int missCount = 0;
+        int framesSinceConfirm = 0;
+        bool matchedThisFrame = false;
+        bool needsConfirmation = true;
+        QString previewPath;
+        float lastSimilarity = -1.0f;
+    };
+    QHash<int, QHash<quint64, FaceTrack>> cameraTracks;
+    quint64 nextTrackId = 1;
+    int trackMissThreshold = 10;
+    int trackConfirmationInterval = 30;
+    int hysteresisWindow = 5;
+    float trackIouThreshold = 0.4f;
 };
 
 Q_DECLARE_METATYPE(AIProcessor::FaceProfile)

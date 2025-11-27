@@ -29,6 +29,7 @@
 #undef max
 #endif
 #include <cmath>
+#include <limits>
 
 namespace {
 const cv::Size kDnnInputSize(300, 300);
@@ -343,6 +344,39 @@ QString AIProcessor::generateFaceId()
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
+bool AIProcessor::storeEmbeddingEntry(const QString& name, std::vector<float> embedding, const QString& previewPath, const QString& savePath)
+{
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty() || embedding.empty())
+        return false;
+
+    LabeledEmbedding entry;
+    entry.id = generateFaceId();
+    entry.name = trimmed;
+    entry.embedding = std::move(embedding);
+    entry.previewPath = previewPath;
+    entry.sampleCount = 1;
+    normalizeEmbedding(entry.embedding);
+    {
+        QMutexLocker locker(&knownEmbeddingsMutex);
+        knownEmbeddings.push_back(entry);
+    }
+
+    const QString path = savePath.isEmpty() ? embeddingsPath : savePath;
+    if (!persistKnownEmbeddings(path)) {
+        qWarning() << "Failed to persist embeddings to" << path;
+        return false;
+    }
+    invalidateRecognitionCache();
+    emit faceDatabaseChanged();
+    return true;
+}
+
+QString AIProcessor::makeAutoLabel()
+{
+    return QStringLiteral("Person_%1").arg(autoEnrollCounter++);
+}
+
 void AIProcessor::invalidateRecognitionCache()
 {
     QMutexLocker locker(&recognitionCacheMutex);
@@ -381,25 +415,11 @@ bool AIProcessor::addKnownEmbedding(const QString& name, const cv::Mat& faceBgr,
     }
 
     LabeledEmbedding entry;
-    entry.id = generateFaceId();
     entry.name = name.trimmed();
     entry.embedding = emb;
     entry.previewPath = saveFacePreview(entry.name, faceBgr);
     entry.sampleCount = 1;
-    normalizeEmbedding(entry.embedding);
-    {
-        QMutexLocker locker(&knownEmbeddingsMutex);
-        knownEmbeddings.push_back(entry);
-    }
-
-    const QString path = savePath.isEmpty() ? embeddingsPath : savePath;
-    if (!persistKnownEmbeddings(path)) {
-        qWarning() << "Failed to persist embeddings to" << path;
-        return false;
-    }
-    invalidateRecognitionCache();
-    emit faceDatabaseChanged();
-    return true;
+    return storeEmbeddingEntry(entry.name, std::move(entry.embedding), entry.previewPath, savePath);
 }
 
 std::vector<float> AIProcessor::computeEmbedding(const cv::Mat& faceBgr) const
@@ -708,6 +728,8 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
     cv::Mat out = faceNet.forward();
 
     const int detectionsCount = out.size[2];
+    QVector<cv::Mat> faceCrops;
+    faceCrops.reserve(detectionsCount);
     for (int i = 0; i < detectionsCount; ++i) {
         const float confidence = out.ptr<float>(0, 0, i)[2];
         if (confidence < faceThreshold)
@@ -730,32 +752,20 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
         detection.confidence = confidence;
         detection.rect = toRect(rect, frame.size());
         detection.color = faceColor;
-        QString textLabel = QString("%1 %2%").arg(detection.label).arg(static_cast<int>(confidence * 100));
-
-        const QString cacheKey = detectionCacheKey(cameraId, detection.rect, frameSize);
-        RecognitionCacheEntry cacheEntry;
-        if (tryGetCachedRecognition(cacheKey, cacheEntry)) {
-            if (!cacheEntry.label.isEmpty()) {
-                detection.label = cacheEntry.label;
-                detection.category = QStringLiteral("Face");
-                detection.color = cacheEntry.color;
-                detection.previewPath = resolvePreviewPath(cacheEntry.previewPath);
-                textLabel = cacheEntry.similarity >= 0.0f
-                    ? QString("%1 (%2)").arg(cacheEntry.label, QString::number(cacheEntry.similarity, 'f', 2))
-                    : cacheEntry.label;
-            }
-        } else if (hasEmbedModel()) {
-            const bool allowRecognition = !isRecognitionRateLimited() || isRecognitionReady();
-            if (allowRecognition) {
-                const cv::Mat faceCopy = frame(rect).clone();
-                scheduleEmbeddingJob(cacheKey, faceCopy);
-                textLabel = QStringLiteral("Face (processing)");
-            } else {
-                textLabel = QStringLiteral("Face (waiting)");
-            }
-        }
         detections.append(detection);
+        faceCrops.append(frame(rect).clone());
+    }
 
+    detections = stabilizeFaces(detections, faceCrops, cameraId);
+
+    for (int i = 0; i < detections.size(); ++i) {
+        const Detection& detection = detections[i];
+        const QRect& qtRect = detection.rect;
+        cv::Rect rect(cv::Point(qtRect.x(), qtRect.y()), cv::Point(qtRect.x() + qtRect.width(), qtRect.y() + qtRect.height()));
+        rect &= cv::Rect(0, 0, frame.cols, frame.rows);
+        const QString textLabel = detection.confidence > 0.0f
+            ? QString("%1 %2%").arg(detection.label).arg(static_cast<int>(detection.confidence * 100))
+            : detection.label;
         cv::rectangle(canvas, rect, toScalar(detection.color), 2);
         const int textY = std::min(rect.y + rect.height + 18, frame.rows - 4);
         cv::putText(canvas, textLabel.toStdString(), cv::Point(rect.x, textY),
@@ -997,4 +1007,352 @@ void AIProcessor::completeRecognitionJob(const QString& key, const RecognitionCa
     cacheEntry.pending = false;
     cacheEntry.hasResult = true;
     cacheEntry.timer.restart();
+}
+QVector<Detection> AIProcessor::stabilizeFaces(const QVector<Detection>& rawDetections, const QVector<cv::Mat>& faceCrops, int cameraId)
+{
+    QVector<Detection> detections = rawDetections;
+    if (detections.size() != faceCrops.size())
+        return detections;
+
+    QHash<quint64, FaceTrack>& tracks = cameraTracks[cameraId];
+    if (detections.isEmpty()) {
+        for (auto it = tracks.begin(); it != tracks.end();) {
+            it->missCount++;
+            if (it->missCount > trackMissThreshold)
+                it = tracks.erase(it);
+            else
+                ++it;
+        }
+        return detections;
+    }
+
+    QVector<quint64> detectionTrackIds(detections.size(), 0);
+    QVector<bool> needsRecognition(detections.size(), false);
+
+    QVector<quint64> existingTrackIds;
+    existingTrackIds.reserve(tracks.size());
+    for (auto it = tracks.cbegin(); it != tracks.cend(); ++it)
+        existingTrackIds.append(it.key());
+
+    QVector<QVector<float>> iouMatrix;
+    if (!existingTrackIds.isEmpty()) {
+        iouMatrix.resize(detections.size());
+        for (int i = 0; i < detections.size(); ++i) {
+            iouMatrix[i].resize(existingTrackIds.size());
+            for (int j = 0; j < existingTrackIds.size(); ++j) {
+                const FaceTrack& track = tracks[existingTrackIds[j]];
+                iouMatrix[i][j] = intersectionOverUnion(detections[i].rect, track.rect);
+            }
+        }
+        QVector<int> assignment = runAssignment(iouMatrix);
+        for (int i = 0; i < detections.size(); ++i) {
+            const int trackIndex = (i < assignment.size()) ? assignment[i] : -1;
+            if (trackIndex < 0 || trackIndex >= existingTrackIds.size())
+                continue;
+            const float iou = iouMatrix[i][trackIndex];
+            if (iou < trackIouThreshold)
+                continue;
+            const quint64 trackId = existingTrackIds[trackIndex];
+            FaceTrack& track = tracks[trackId];
+            if (track.matchedThisFrame)
+                continue;
+            track.matchedThisFrame = true;
+            track.rect = detections[i].rect;
+            track.missCount = 0;
+            track.framesSinceConfirm++;
+            detectionTrackIds[i] = trackId;
+            needsRecognition[i] = track.needsConfirmation
+                || track.framesSinceConfirm >= trackConfirmationInterval
+                || track.stableLabel.isEmpty();
+        }
+    }
+
+    for (int i = 0; i < detections.size(); ++i) {
+        if (detectionTrackIds[i] != 0)
+            continue;
+        FaceTrack newTrack;
+        newTrack.id = nextTrackId++;
+        newTrack.rect = detections[i].rect;
+        newTrack.matchedThisFrame = true;
+        newTrack.needsConfirmation = true;
+        auto inserted = tracks.insert(newTrack.id, newTrack);
+        detectionTrackIds[i] = inserted.key();
+        needsRecognition[i] = true;
+    }
+
+    // remove stale tracks (not matched this frame)
+    for (auto it = tracks.begin(); it != tracks.end();) {
+        if (!it->matchedThisFrame) {
+            it->missCount++;
+            if (it->missCount > trackMissThreshold)
+                it = tracks.erase(it);
+            else
+                ++it;
+        } else {
+            it->matchedThisFrame = false;
+            ++it;
+        }
+    }
+
+    QVector<int> recognitionIndices;
+    recognitionIndices.reserve(detections.size());
+    if (hasEmbedModel()) {
+        for (int i = 0; i < detections.size(); ++i) {
+            if (needsRecognition[i] && !faceCrops[i].empty())
+                recognitionIndices.append(i);
+        }
+    }
+
+    std::vector<LabeledEmbedding> knownSnapshot;
+    {
+        QMutexLocker locker(&knownEmbeddingsMutex);
+        knownSnapshot = knownEmbeddings;
+    }
+
+    if (!recognitionIndices.isEmpty()) {
+        const bool allowRecognition = !isRecognitionRateLimited() || claimRecognitionSlot();
+        if (!allowRecognition)
+            recognitionIndices.clear();
+    }
+
+    QVector<std::vector<float>> frameEmbeddings;
+    QVector<QVector<float>> similarityMatrix;
+    if (!recognitionIndices.isEmpty()) {
+        frameEmbeddings.reserve(recognitionIndices.size());
+        if (!knownSnapshot.empty())
+            similarityMatrix.resize(recognitionIndices.size());
+        for (int idx = 0; idx < recognitionIndices.size(); ++idx) {
+            const int detIndex = recognitionIndices[idx];
+            std::vector<float> embedding = computeEmbedding(faceCrops[detIndex]);
+            frameEmbeddings.push_back(embedding);
+            if (knownSnapshot.empty())
+                continue;
+            similarityMatrix[idx].resize(static_cast<int>(knownSnapshot.size()), -1.0f);
+            if (embedding.empty())
+                continue;
+            for (int profileIndex = 0; profileIndex < static_cast<int>(knownSnapshot.size()); ++profileIndex) {
+                similarityMatrix[idx][profileIndex] = cosineSimilarity(embedding, knownSnapshot[profileIndex].embedding);
+            }
+        }
+    }
+
+    QVector<int> matchedProfiles;
+    QVector<float> matchedSimilarities;
+    if (!recognitionIndices.isEmpty() && !knownSnapshot.empty()) {
+        QVector<int> assignment = runAssignment(similarityMatrix);
+        matchedProfiles = QVector<int>(recognitionIndices.size(), -1);
+        matchedSimilarities = QVector<float>(recognitionIndices.size(), -1.0f);
+        for (int idx = 0; idx < recognitionIndices.size(); ++idx) {
+            const int profileIndex = (idx < assignment.size()) ? assignment[idx] : -1;
+            if (profileIndex >= 0 && profileIndex < similarityMatrix[idx].size()) {
+                matchedProfiles[idx] = profileIndex;
+                matchedSimilarities[idx] = similarityMatrix[idx][profileIndex];
+            }
+        }
+    }
+
+    for (int idx = 0; idx < recognitionIndices.size(); ++idx) {
+        const int detIndex = recognitionIndices[idx];
+        const quint64 trackId = detectionTrackIds[detIndex];
+        if (!trackId || !tracks.contains(trackId))
+            continue;
+        FaceTrack& track = tracks[trackId];
+
+        bool recognized = false;
+        if (!knownSnapshot.empty() && idx < matchedProfiles.size()) {
+            const int profileIndex = matchedProfiles[idx];
+            const float similarity = idx < matchedSimilarities.size() ? matchedSimilarities[idx] : -1.0f;
+            if (profileIndex >= 0 && similarity >= recognitionThreshold) {
+                const auto& profile = knownSnapshot[profileIndex];
+                applyTrackLabel(track, profile.name, similarity, profile.previewPath);
+                track.needsConfirmation = false;
+                track.framesSinceConfirm = 0;
+                recognized = true;
+            }
+        }
+
+        if (!recognized) {
+            track.needsConfirmation = true;
+            const bool allowAutoEnroll = autoEnrollEnabled
+                && (!autoEnrollTimer.isValid() || autoEnrollTimer.elapsed() >= autoEnrollCooldownMs);
+            if (allowAutoEnroll && track.stableLabel.isEmpty() && detIndex < faceCrops.size()) {
+                std::vector<float> embedding = idx < frameEmbeddings.size() ? frameEmbeddings[idx] : std::vector<float>();
+                if (embedding.empty())
+                    embedding = computeEmbedding(faceCrops[detIndex]);
+                if (!embedding.empty()) {
+                    const QString autoName = makeAutoLabel();
+                    const QString previewPath = saveFacePreview(autoName, faceCrops[detIndex]);
+                    if (!previewPath.isEmpty() && storeEmbeddingEntry(autoName, std::move(embedding), previewPath)) {
+                        track.stableLabel = autoName;
+                        track.candidateLabel.clear();
+                        track.candidateCount = 0;
+                        track.needsConfirmation = false;
+                        track.framesSinceConfirm = 0;
+                        track.previewPath = previewPath;
+                        track.lastSimilarity = -1.0f;
+                        autoEnrollTimer.restart();
+                        recognized = true;
+                    }
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < detections.size(); ++i) {
+        const quint64 trackId = detectionTrackIds[i];
+        if (!trackId || !tracks.contains(trackId))
+            continue;
+        const FaceTrack& track = tracks[trackId];
+        if (!track.stableLabel.isEmpty()) {
+            detections[i].label = track.stableLabel;
+            detections[i].color = recognizedFaceColor;
+        } else if (!track.candidateLabel.isEmpty()) {
+            detections[i].label = track.candidateLabel;
+            detections[i].color = faceColor;
+        } else {
+            detections[i].label = QStringLiteral("Face");
+            detections[i].color = faceColor;
+        }
+        detections[i].previewPath = resolvePreviewPath(track.previewPath);
+    }
+
+    return detections;
+}
+void AIProcessor::applyTrackLabel(FaceTrack& track, const QString& newLabel, float similarity, const QString& previewPath)
+{
+    if (newLabel.isEmpty())
+        return;
+
+    if (track.stableLabel == newLabel) {
+        track.candidateLabel.clear();
+        track.candidateCount = 0;
+        track.lastSimilarity = similarity;
+        if (!previewPath.isEmpty())
+            track.previewPath = previewPath;
+        return;
+    }
+
+    if (track.candidateLabel == newLabel)
+        track.candidateCount++;
+    else {
+        track.candidateLabel = newLabel;
+        track.candidateCount = 1;
+    }
+
+    if (track.candidateCount >= hysteresisWindow) {
+        track.stableLabel = newLabel;
+        track.candidateLabel.clear();
+        track.candidateCount = 0;
+        track.lastSimilarity = similarity;
+        if (!previewPath.isEmpty())
+            track.previewPath = previewPath;
+    }
+}
+
+float AIProcessor::intersectionOverUnion(const QRect& a, const QRect& b) const
+{
+    if (a.isNull() || b.isNull())
+        return 0.0f;
+
+    const float ax1 = static_cast<float>(a.left());
+    const float ay1 = static_cast<float>(a.top());
+    const float ax2 = static_cast<float>(a.left() + a.width());
+    const float ay2 = static_cast<float>(a.top() + a.height());
+    const float bx1 = static_cast<float>(b.left());
+    const float by1 = static_cast<float>(b.top());
+    const float bx2 = static_cast<float>(b.left() + b.width());
+    const float by2 = static_cast<float>(b.top() + b.height());
+
+    const float x1 = std::max(ax1, bx1);
+    const float y1 = std::max(ay1, by1);
+    const float x2 = std::min(ax2, bx2);
+    const float y2 = std::min(ay2, by2);
+
+    const float intersectionWidth = std::max(0.0f, x2 - x1);
+    const float intersectionHeight = std::max(0.0f, y2 - y1);
+    const float intersectionArea = intersectionWidth * intersectionHeight;
+    const float areaA = std::max(0.0f, ax2 - ax1) * std::max(0.0f, ay2 - ay1);
+    const float areaB = std::max(0.0f, bx2 - bx1) * std::max(0.0f, by2 - by1);
+    const float unionArea = areaA + areaB - intersectionArea;
+    if (unionArea <= 0)
+        return 0.0f;
+    return intersectionArea / unionArea;
+}
+
+QVector<int> AIProcessor::runAssignment(const QVector<QVector<float>>& similarityMatrix) const
+{
+    const int rows = similarityMatrix.size();
+    if (rows == 0)
+        return {};
+    const int cols = similarityMatrix.first().size();
+    if (cols == 0)
+        return QVector<int>(rows, -1);
+
+    const int size = std::max(rows, cols);
+    double maxSim = -1.0;
+    for (const auto& row : similarityMatrix) {
+        for (float sim : row)
+            maxSim = std::max(maxSim, static_cast<double>(sim));
+    }
+    if (maxSim < 0.0)
+        maxSim = 1.0;
+
+    const double INF = std::numeric_limits<double>::infinity();
+    std::vector<std::vector<double>> cost(size + 1, std::vector<double>(size + 1, maxSim));
+    for (int i = 1; i <= rows; ++i) {
+        for (int j = 1; j <= cols; ++j) {
+            const double sim = similarityMatrix[i - 1][j - 1];
+            const double normalized = sim < 0 ? 0.0 : sim;
+            cost[i][j] = maxSim - normalized;
+        }
+    }
+
+    std::vector<double> u(size + 1, 0.0), v(size + 1, 0.0);
+    std::vector<int> p(size + 1, 0), way(size + 1, 0);
+    for (int i = 1; i <= size; ++i) {
+        p[0] = i;
+        int j0 = 0;
+        std::vector<double> minv(size + 1, INF);
+        std::vector<bool> used(size + 1, false);
+        do {
+            used[j0] = true;
+            int i0 = p[j0], j1 = 0;
+            double delta = INF;
+            for (int j = 1; j <= size; ++j) {
+                if (used[j])
+                    continue;
+                double cur = cost[i0][j] - u[i0] - v[j];
+                if (cur < minv[j]) {
+                    minv[j] = cur;
+                    way[j] = j0;
+                }
+                if (minv[j] < delta) {
+                    delta = minv[j];
+                    j1 = j;
+                }
+            }
+            for (int j = 0; j <= size; ++j) {
+                if (used[j]) {
+                    u[p[j]] += delta;
+                    v[j] -= delta;
+                } else {
+                    minv[j] -= delta;
+                }
+            }
+            j0 = j1;
+        } while (p[j0] != 0);
+        do {
+            int j1 = way[j0];
+            p[j0] = p[j1];
+            j0 = j1;
+        } while (j0);
+    }
+
+    QVector<int> assignment(rows, -1);
+    for (int j = 1; j <= size; ++j) {
+        const int i = p[j];
+        if (i >= 1 && i <= rows && j >= 1 && j <= cols)
+            assignment[i - 1] = j - 1;
+    }
+    return assignment;
 }
