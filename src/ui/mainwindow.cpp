@@ -96,6 +96,7 @@ void MainWindow::setupUi()
     listModes->addItems({
         "?? Dashboard",
         "?? Live Cameras",
+        "?? Face Database",
         "?? Heatmap Analytics",
         "?? Events / Logs",
         "?? 3D Face Viewer",
@@ -174,13 +175,16 @@ void MainWindow::setupUi()
     aiThread->start();
 
     camerasPage = new CamerasPage(cameraManager, aiProcessor, this);
+    analyticsPage = new AnalyticsPage(cameraManager, aiProcessor, this);
+    faceDbPage = new FaceDatabasePage(aiProcessor, this);
 
     stackedWidget->addWidget(dashboard);
     stackedWidget->addWidget(camerasPage);
+    stackedWidget->addWidget(faceDbPage);
     stackedWidget->addWidget(new QWidget);
     stackedWidget->addWidget(new QWidget);
     stackedWidget->addWidget(new QWidget);
-    stackedWidget->addWidget(new QWidget);
+    stackedWidget->addWidget(analyticsPage);
     stackedWidget->addWidget(new QWidget);
     stackedWidget->addWidget(new QWidget);
 

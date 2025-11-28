@@ -12,6 +12,8 @@
 #include <QSize>
 #include <QMutex>
 #include <QHash>
+#include <QStringList>
+#include <QSet>
 
 #include <memory>
 #include <vector>
@@ -53,6 +55,13 @@ class AIProcessor : public QObject
 public:
     explicit AIProcessor(QObject* parent = nullptr);
 
+    struct FaceProfile {
+        QString id;
+        QString name;
+        QString previewPath; // resolved absolute path if available
+        int sampleCount = 1;
+    };
+
     bool loadFaceModel(const QString& modelPath, const QString& configPath = QString());
     bool loadObjectModel(const QString& modelPath, const QString& configPath = QString());
     int recognitionInterval() const { return recognitionIntervalMs; }
@@ -66,6 +75,10 @@ public:
     std::vector<float> computeEmbedding(const cv::Mat& faceBgr) const;
 
     ProcessedFrame processFrame(const cv::Mat& frame, int cameraId = -1);
+    Q_INVOKABLE QVector<FaceProfile> listFaceProfiles() const;
+    Q_INVOKABLE bool renameFaceProfile(const QString& id, const QString& newName);
+    Q_INVOKABLE bool deleteFaceProfile(const QString& id);
+    Q_INVOKABLE bool mergeFaceProfiles(const QString& targetId, const QStringList& duplicateIds);
 
 public slots:
     void setFaceConfidence(float threshold);
@@ -82,12 +95,15 @@ signals:
     void frameProcessed(int cameraId, const QImage& annotated, const QVector<Detection>& detections, const QSize& sourceSize);
     void recognitionIntervalChanged(int intervalMs);
     void embeddingBackendChanged(bool preferGpu);
+    void faceDatabaseChanged();
 
 private:
     struct LabeledEmbedding {
+        QString id;
         QString name;
         std::vector<float> embedding;
         QString previewPath;
+        int sampleCount = 1;
     };
 
     struct RecognitionCacheEntry {
@@ -112,6 +128,11 @@ private:
     void setKnownEmbeddings(const QVector<LabeledEmbedding>& labeledEmbeddings);
     QString saveFacePreview(const QString& name, const cv::Mat& faceBgr) const;
     QString resolvePreviewPath(const QString& storedPath) const;
+    static QString generateFaceId();
+    bool storeEmbeddingEntry(const QString& name, std::vector<float> embedding, const QString& previewPath, const QString& savePath = QString());
+    QString makeAutoLabel();
+    void invalidateRecognitionCache();
+    bool removeFacePreviewFile(const QString& storedPath) const;
 
     static cv::Scalar toScalar(const QColor& color);
     static QRect toRect(const cv::Rect& rect, const cv::Size& bounds);
@@ -122,6 +143,11 @@ private:
     void scheduleEmbeddingJob(const QString& key, cv::Mat face);
     void completeRecognitionJob(const QString& key, const RecognitionCacheEntry& entry);
     RecognitionCacheEntry runRecognitionTask(const cv::Mat& face) const;
+    QVector<Detection> stabilizeFaces(const QVector<Detection>& rawDetections, const QVector<cv::Mat>& faceCrops, int cameraId);
+    struct FaceTrack;
+    void applyTrackLabel(FaceTrack& track, const QString& newLabel, float similarity, const QString& previewPath);
+    QVector<int> runAssignment(const QVector<QVector<float>>& similarityMatrix) const;
+    float intersectionOverUnion(const QRect& a, const QRect& b) const;
 
     cv::dnn::Net faceNet;
     cv::dnn::Net objectNet;
@@ -145,6 +171,7 @@ private:
     bool autoEnrollEnabled = true;
     int autoEnrollCooldownMs = 2000;
     QElapsedTimer autoEnrollTimer;
+    int autoEnrollCounter = 1;
     int recognitionIntervalMs = 500;
     mutable QElapsedTimer recognitionTimer;
     int recognitionCacheTtlMs = 500;
@@ -152,6 +179,28 @@ private:
     mutable QMutex knownEmbeddingsMutex;
     mutable QMutex recognitionCacheMutex;
     QHash<QString, RecognitionCacheEntry> recognitionCache;
+    struct FaceTrack {
+        quint64 id = 0;
+        QRect rect;
+        QString stableLabel;
+        QString candidateLabel;
+        int candidateCount = 0;
+        int missCount = 0;
+        int framesSinceConfirm = 0;
+        bool matchedThisFrame = false;
+        bool needsConfirmation = true;
+        QString previewPath;
+        float lastSimilarity = -1.0f;
+    };
+    QHash<int, QHash<quint64, FaceTrack>> cameraTracks;
+    quint64 nextTrackId = 1;
+    int trackMissThreshold = 10;
+    int trackConfirmationInterval = 30;
+    int hysteresisWindow = 5;
+    float trackIouThreshold = 0.4f;
 };
+
+Q_DECLARE_METATYPE(AIProcessor::FaceProfile)
+Q_DECLARE_METATYPE(QVector<AIProcessor::FaceProfile>)
 
 #endif // AIPROCESSOR_H
