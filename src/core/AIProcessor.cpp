@@ -19,6 +19,7 @@
 #include <QSet>
 #include <algorithm>
 #include <mutex>
+#include <array>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/objdetect.hpp>
@@ -36,6 +37,10 @@ const cv::Size kDnnInputSize(300, 300);
 const cv::Scalar kMeanValues(104.0, 177.0, 123.0); // commonly used for FaceNet style models
 const QString kDefaultEmbeddingsPath = QStringLiteral("config/embeddings.json");
 constexpr int kMaxProcessWidth = 960; // downscale wide frames for faster inference while keeping quality
+constexpr float kFacePadXRatio = 0.18f;      // widen crop to include ears/hair
+constexpr float kFacePadTopRatio = 0.28f;    // add more headroom for hair
+constexpr float kFacePadBottomRatio = 0.18f; // ensure chin is visible
+constexpr std::array<int, 2> kPersonClassCandidates = { 0, 15 }; // YOLO/SSD defaults
 
 void configureOpenCvThreading()
 {
@@ -112,6 +117,30 @@ ScaledFrame makeScaledFrame(const cv::Mat& frame, int maxWidth)
     }
     return scaled;
 }
+
+cv::Rect padFaceRect(const cv::Rect& rect, const cv::Size& bounds)
+{
+    if (rect.empty())
+        return rect;
+
+    const int padX = static_cast<int>(rect.width * kFacePadXRatio);
+    const int padTop = static_cast<int>(rect.height * kFacePadTopRatio);
+    const int padBottom = static_cast<int>(rect.height * kFacePadBottomRatio);
+
+    cv::Rect padded(rect.x - padX,
+        rect.y - padTop,
+        rect.width + padX * 2,
+        rect.height + padTop + padBottom);
+
+    padded &= cv::Rect(0, 0, bounds.width, bounds.height);
+    return padded;
+}
+
+bool matchesPersonClass(int classId)
+{
+    return std::find(kPersonClassCandidates.begin(), kPersonClassCandidates.end(), classId)
+        != kPersonClassCandidates.end();
+}
 }
 
 AIProcessor::AIProcessor(QObject* parent)
@@ -131,18 +160,48 @@ AIProcessor::AIProcessor(QObject* parent)
 
 bool AIProcessor::loadFaceModel(const QString& modelPath, const QString& configPath)
 {
+    const QString resolvedModel = resolvePath(modelPath);
+    const QString resolvedConfig = configPath.isEmpty() ? QString() : resolvePath(configPath);
+    faceNet = cv::dnn::Net();
+    yuNetDetector.release();
+    faceDetectorMode = FaceDetectorMode::None;
+
+    const QString suffix = QFileInfo(resolvedModel).suffix().toLower();
+
     try {
-        if (configPath.isEmpty())
-            faceNet = cv::dnn::readNet(modelPath.toStdString());
-        else
-            faceNet = cv::dnn::readNet(modelPath.toStdString(), configPath.toStdString());
-        if (!faceNet.empty())
-            setDnnBackend(faceNet);
-        return !faceNet.empty();
+        if (suffix == QStringLiteral("caffemodel")) {
+            if (resolvedConfig.isEmpty())
+                qWarning() << "Caffe face detector requires .prototxt configuration";
+            if (resolvedConfig.isEmpty())
+                return false;
+            faceNet = cv::dnn::readNet(resolvedModel.toStdString(), resolvedConfig.toStdString());
+            if (!faceNet.empty()) {
+                setDnnBackend(faceNet);
+                faceDetectorMode = FaceDetectorMode::Ssd;
+            }
+            return !faceNet.empty();
+        }
+
+        if (suffix == QStringLiteral("onnx")) {
+            yuNetDetector = cv::FaceDetectorYN::create(
+                resolvedModel.toStdString(),
+                resolvedConfig.toStdString(),
+                cv::Size(kDnnInputSize.width, kDnnInputSize.height),
+                faceThreshold,
+                0.3f,
+                5000,
+                cv::dnn::DNN_BACKEND_DEFAULT,
+                cv::dnn::DNN_TARGET_CPU);
+            if (yuNetDetector)
+                faceDetectorMode = FaceDetectorMode::YuNet;
+            return static_cast<bool>(yuNetDetector);
+        }
+
+        qWarning() << "Unsupported face detector model:" << modelPath;
     } catch (const cv::Exception& ex) {
         qWarning() << "Failed to load face model:" << ex.what();
-        return false;
     }
+    return false;
 }
 
 bool AIProcessor::loadObjectModel(const QString& modelPath, const QString& configPath)
@@ -169,6 +228,32 @@ void AIProcessor::setFaceConfidence(float threshold)
 void AIProcessor::setObjectConfidence(float threshold)
 {
     objectThreshold = std::clamp(threshold, 0.05f, 0.99f);
+}
+
+bool AIProcessor::loadGenderAgeModel(const QString& modelPath)
+{
+    const QString resolved = resolvePath(modelPath);
+    genderAgeNet = cv::dnn::Net();
+    if (resolved.isEmpty()) {
+        qWarning() << "Gender/Age model path is empty";
+        return false;
+    }
+
+    try {
+        genderAgeNet = cv::dnn::readNet(resolved.toStdString());
+        if (genderAgeNet.empty()) {
+            qWarning() << "Failed to load gender/age model from" << resolved;
+            return false;
+        }
+        genderAgeNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
+        genderAgeNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+        qInfo() << "Gender/Age model loaded from" << resolved;
+        return true;
+    } catch (const cv::Exception& ex) {
+        qWarning() << "Failed to load gender/age model:" << ex.what();
+        genderAgeNet = cv::dnn::Net();
+        return false;
+    }
 }
 
 void AIProcessor::setRecognitionIntervalMs(int interval)
@@ -200,8 +285,10 @@ ProcessedFrame AIProcessor::processFrame(const cv::Mat& frame, int cameraId)
 
     QVector<Detection> detections;
     detections += detectFaces(frame, canvas, cameraId);
-    detections += detectPersons(frame, canvas);
-    detections += detectObjects(frame, canvas);
+
+    const std::vector<ObjectProposal> objectProposals = inferObjects(frame);
+    detections += detectPersons(frame, canvas, objectProposals);
+    detections += detectObjects(frame, canvas, objectProposals);
 
     result.annotated = canvas;
     result.detections = detections;
@@ -715,7 +802,68 @@ bool AIProcessor::persistKnownEmbeddings(const QString& path) const
 QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canvas, int cameraId)
 {
     QVector<Detection> detections;
-    if (faceNet.empty())
+    if (faceDetectorMode == FaceDetectorMode::None)
+        return detections;
+
+    if (faceDetectorMode == FaceDetectorMode::YuNet && yuNetDetector) {
+        yuNetDetector->setInputSize(frame.size());
+        cv::Mat rawDetections;
+        yuNetDetector->detect(frame, rawDetections);
+        if (rawDetections.empty())
+            return detections;
+
+        QVector<cv::Mat> faceCrops;
+        faceCrops.reserve(rawDetections.rows);
+        for (int i = 0; i < rawDetections.rows; ++i) {
+            const float score = rawDetections.at<float>(i, 4);
+            if (score < faceThreshold)
+                continue;
+
+            cv::Rect rect(
+                static_cast<int>(rawDetections.at<float>(i, 0)),
+                static_cast<int>(rawDetections.at<float>(i, 1)),
+                static_cast<int>(rawDetections.at<float>(i, 2)),
+                static_cast<int>(rawDetections.at<float>(i, 3)));
+            rect &= cv::Rect(0, 0, frame.cols, frame.rows);
+            if (rect.empty())
+                continue;
+
+            cv::Rect padded = padFaceRect(rect, frame.size());
+            if (padded.empty())
+                continue;
+
+        Detection detection;
+        detection.label = QStringLiteral("Face");
+        detection.category = QStringLiteral("Face");
+        detection.confidence = score;
+        detection.rect = toRect(padded, frame.size());
+        detection.color = faceColor;
+        if (!genderAgeNet.empty())
+            detection.demographics = inferGenderAge(frame(padded));
+        detections.append(detection);
+        faceCrops.append(frame(padded).clone());
+        }
+
+        detections = stabilizeFaces(detections, faceCrops, cameraId);
+        for (const Detection& detection : std::as_const(detections)) {
+            const QRect& qtRect = detection.rect;
+            cv::Rect rect(cv::Point(qtRect.x(), qtRect.y()),
+                cv::Point(qtRect.x() + qtRect.width(), qtRect.y() + qtRect.height()));
+            rect &= cv::Rect(0, 0, frame.cols, frame.rows);
+            QString textLabel = detection.confidence > 0.0f
+                ? QString("%1 %2%").arg(detection.label).arg(static_cast<int>(detection.confidence * 100))
+                : detection.label;
+            if (!detection.demographics.isEmpty())
+                textLabel += QStringLiteral(" (%1)").arg(detection.demographics);
+            cv::rectangle(canvas, rect, toScalar(detection.color), 2);
+            const int textY = std::min(rect.y + rect.height + 18, frame.rows - 4);
+            cv::putText(canvas, textLabel.toStdString(), cv::Point(rect.x, textY),
+                cv::FONT_HERSHEY_SIMPLEX, 0.5, toScalar(detection.color), 1, cv::LINE_AA);
+        }
+        return detections;
+    }
+
+    if (faceDetectorMode != FaceDetectorMode::Ssd || faceNet.empty())
         return detections;
 
     const QSize frameSize(frame.cols, frame.rows);
@@ -746,14 +894,20 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
         if (rect.empty())
             continue;
 
+        cv::Rect padded = padFaceRect(rect, frame.size());
+        if (padded.empty())
+            continue;
+
         Detection detection;
         detection.label = QStringLiteral("Face");
         detection.category = QStringLiteral("Face");
         detection.confidence = confidence;
-        detection.rect = toRect(rect, frame.size());
+        detection.rect = toRect(padded, frame.size());
         detection.color = faceColor;
+        if (!genderAgeNet.empty())
+            detection.demographics = inferGenderAge(frame(padded));
         detections.append(detection);
-        faceCrops.append(frame(rect).clone());
+        faceCrops.append(frame(padded).clone());
     }
 
     detections = stabilizeFaces(detections, faceCrops, cameraId);
@@ -763,9 +917,11 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
         const QRect& qtRect = detection.rect;
         cv::Rect rect(cv::Point(qtRect.x(), qtRect.y()), cv::Point(qtRect.x() + qtRect.width(), qtRect.y() + qtRect.height()));
         rect &= cv::Rect(0, 0, frame.cols, frame.rows);
-        const QString textLabel = detection.confidence > 0.0f
+        QString textLabel = detection.confidence > 0.0f
             ? QString("%1 %2%").arg(detection.label).arg(static_cast<int>(detection.confidence * 100))
             : detection.label;
+        if (!detection.demographics.isEmpty())
+            textLabel += QStringLiteral(" (%1)").arg(detection.demographics);
         cv::rectangle(canvas, rect, toScalar(detection.color), 2);
         const int textY = std::min(rect.y + rect.height + 18, frame.rows - 4);
         cv::putText(canvas, textLabel.toStdString(), cv::Point(rect.x, textY),
@@ -775,9 +931,177 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
     return detections;
 }
 
-QVector<Detection> AIProcessor::detectPersons(const cv::Mat& frame, cv::Mat& canvas)
+std::vector<AIProcessor::ObjectProposal> AIProcessor::inferObjects(const cv::Mat& frame)
+{
+    std::vector<ObjectProposal> proposals;
+    if (objectNet.empty() || frame.empty())
+        return proposals;
+
+    const ScaledFrame scaled = makeScaledFrame(frame, kMaxProcessWidth);
+    const cv::Mat& input = scaled.image;
+    const float invScale = scaled.scale > 0.0f ? 1.0f / scaled.scale : 1.0f;
+
+    cv::Mat blob = cv::dnn::blobFromImage(input, 1.0, kDnnInputSize, cv::Scalar(), true, false);
+    objectNet.setInput(blob);
+    cv::Mat out = objectNet.forward();
+    if (out.dims == 0)
+        return proposals;
+
+    const int rows = out.size[2];
+    proposals.reserve(rows);
+    for (int i = 0; i < rows; ++i) {
+        const float* detection = out.ptr<float>(0, 0, i);
+        const float confidence = detection[2];
+        if (confidence < objectThreshold)
+            continue;
+
+        const float x1 = detection[3] * input.cols * invScale;
+        const float y1 = detection[4] * input.rows * invScale;
+        const float x2 = detection[5] * input.cols * invScale;
+        const float y2 = detection[6] * input.rows * invScale;
+
+        cv::Rect rect(cv::Point(static_cast<int>(x1), static_cast<int>(y1)),
+            cv::Point(static_cast<int>(x2), static_cast<int>(y2)));
+        rect &= cv::Rect(0, 0, frame.cols, frame.rows);
+        if (rect.empty())
+            continue;
+
+        ObjectProposal proposal;
+        proposal.rect = rect;
+        proposal.confidence = confidence;
+        proposal.classId = static_cast<int>(detection[1]);
+        proposals.push_back(proposal);
+    }
+
+    return proposals;
+}
+
+QString AIProcessor::inferGenderAge(const cv::Mat& face)
+{
+    if (face.empty() || genderAgeNet.empty())
+        return {};
+
+    cv::Mat resized;
+    cv::resize(face, resized, cv::Size(112, 112));
+    cv::Mat blob = cv::dnn::blobFromImage(resized, 1.0 / 255.0, cv::Size(112, 112));
+
+    std::vector<cv::Mat> outputs;
+    try {
+        genderAgeNet.setInput(blob);
+        genderAgeNet.forward(outputs, genderAgeNet.getUnconnectedOutLayersNames());
+    } catch (const cv::Exception& ex) {
+        qWarning() << "Gender/Age inference failed:" << ex.what();
+        return {};
+    }
+
+    auto interpretGender = [](const cv::Mat& mat) -> std::pair<QString, float> {
+        if (mat.total() < 2)
+            return { {}, 0.0f };
+        cv::Mat reshaped = mat.reshape(1, 1);
+        double maxVal = 0.0;
+        cv::Point maxLoc;
+        cv::minMaxLoc(reshaped, nullptr, &maxVal, nullptr, &maxLoc);
+        const int idx = maxLoc.x;
+        static const QStringList labels = { QStringLiteral("Female"), QStringLiteral("Male") };
+        if (labels.isEmpty())
+            return { QStringLiteral("Unknown"), static_cast<float>(maxVal) };
+        const int maxIndex = static_cast<int>(labels.size()) - 1;
+        const int clamped = std::clamp(idx, 0, maxIndex);
+        const QString gender = labels.value(clamped, QStringLiteral("Unknown"));
+        return { gender, static_cast<float>(maxVal) };
+    };
+
+    auto interpretAge = [](const cv::Mat& mat) -> int {
+        if (mat.empty())
+            return -1;
+        cv::Mat flat = mat.reshape(1, 1);
+        if (flat.total() == 1) {
+            const float value = flat.at<float>(0);
+            if (!std::isfinite(value))
+                return -1;
+            return std::clamp(static_cast<int>(std::round(value)), 1, 99);
+        }
+
+        double weighted = 0.0;
+        double total = 0.0;
+        for (int i = 0; i < flat.cols; ++i) {
+            const float prob = flat.at<float>(0, i);
+            if (!std::isfinite(prob) || prob <= 0.0f)
+                continue;
+            weighted += prob * i;
+            total += prob;
+        }
+        if (total <= std::numeric_limits<double>::epsilon())
+            return -1;
+        const double value = weighted / total;
+        return std::clamp(static_cast<int>(std::round(value)), 1, 99);
+    };
+
+    cv::Mat genderMat;
+    cv::Mat ageMat;
+
+    if (outputs.empty()) {
+        outputs.emplace_back(genderAgeNet.forward());
+    }
+
+    if (outputs.size() >= 2) {
+        ageMat = outputs[0];
+        genderMat = outputs[1];
+    } else if (!outputs.empty()) {
+        cv::Mat fused = outputs[0].reshape(1, 1);
+        if (fused.cols >= 2) {
+            genderMat = fused.colRange(fused.cols - 2, fused.cols).clone();
+            ageMat = fused.colRange(0, fused.cols - 2).clone();
+        } else {
+            genderMat = fused;
+        }
+    }
+
+    QString genderText;
+    float genderConfidence = 0.0f;
+    int ageYears = -1;
+
+    if (!genderMat.empty())
+        std::tie(genderText, genderConfidence) = interpretGender(genderMat);
+    if (!ageMat.empty()) {
+        if (ageMat.total() == 1) {
+            const float value = ageMat.at<float>(0);
+            if (std::isfinite(value))
+                ageYears = std::clamp(static_cast<int>(std::round(value * 100.0f)), 1, 99);
+        } else {
+            ageYears = interpretAge(ageMat);
+        }
+    }
+
+    if (genderText.isEmpty())
+        return {};
+
+    if (ageYears > 0)
+        return QStringLiteral("%1, %2").arg(genderText, QString::number(ageYears));
+    return genderText;
+}
+
+QVector<Detection> AIProcessor::detectPersons(const cv::Mat& frame, cv::Mat& canvas, const std::vector<ObjectProposal>& proposals)
 {
     QVector<Detection> detections;
+
+    if (!objectNet.empty()) {
+        for (const auto& proposal : proposals) {
+            if (!matchesPersonClass(proposal.classId))
+                continue;
+
+            Detection detection;
+            detection.label = QStringLiteral("Person");
+            detection.category = QStringLiteral("Person");
+            detection.confidence = proposal.confidence;
+            detection.rect = toRect(proposal.rect, frame.size());
+            detection.color = personColor;
+            detections.append(detection);
+
+            cv::rectangle(canvas, proposal.rect, toScalar(personColor), 2);
+        }
+        return detections;
+    }
 
     const ScaledFrame scaled = makeScaledFrame(frame, kMaxProcessWidth);
     const cv::Mat& input = scaled.image;
@@ -813,51 +1137,34 @@ QVector<Detection> AIProcessor::detectPersons(const cv::Mat& frame, cv::Mat& can
     return detections;
 }
 
-QVector<Detection> AIProcessor::detectObjects(const cv::Mat& frame, cv::Mat& canvas)
+QVector<Detection> AIProcessor::detectObjects(const cv::Mat& frame, cv::Mat& canvas, const std::vector<ObjectProposal>& proposals)
 {
     QVector<Detection> detections;
     if (objectNet.empty())
         return detections;
 
-    const ScaledFrame scaled = makeScaledFrame(frame, kMaxProcessWidth);
-    const cv::Mat& input = scaled.image;
-    const float invScale = scaled.scale > 0.0f ? 1.0f / scaled.scale : 1.0f;
+    const std::vector<ObjectProposal>* source = &proposals;
+    std::vector<ObjectProposal> generated;
+    if (source->empty()) {
+        generated = inferObjects(frame);
+        source = &generated;
+    }
 
-    cv::Mat blob = cv::dnn::blobFromImage(input, 1.0, kDnnInputSize, cv::Scalar(), true, false);
-    objectNet.setInput(blob);
-    cv::Mat out = objectNet.forward();
-
-    if (out.dims == 0)
-        return detections;
-
-    const int rows = out.size[2];
-    for (int i = 0; i < rows; ++i) {
-        const float confidence = out.ptr<float>(0, 0, i)[2];
-        if (confidence < objectThreshold)
-            continue;
-
-        const float x1 = out.ptr<float>(0, 0, i)[3] * input.cols * invScale;
-        const float y1 = out.ptr<float>(0, 0, i)[4] * input.rows * invScale;
-        const float x2 = out.ptr<float>(0, 0, i)[5] * input.cols * invScale;
-        const float y2 = out.ptr<float>(0, 0, i)[6] * input.rows * invScale;
-
-        cv::Rect rect(cv::Point(static_cast<int>(x1), static_cast<int>(y1)),
-            cv::Point(static_cast<int>(x2), static_cast<int>(y2)));
-        rect &= cv::Rect(0, 0, frame.cols, frame.rows);
-        if (rect.empty())
+    for (const auto& proposal : *source) {
+        if (matchesPersonClass(proposal.classId))
             continue;
 
         Detection detection;
         detection.label = QStringLiteral("Object");
         detection.category = QStringLiteral("Object");
-        detection.confidence = confidence;
-        detection.rect = toRect(rect, frame.size());
+        detection.confidence = proposal.confidence;
+        detection.rect = toRect(proposal.rect, frame.size());
         detection.color = objectColor;
         detections.append(detection);
 
-        cv::rectangle(canvas, rect, toScalar(objectColor), 2);
-        const QString text = QString("%1 %2%").arg(detection.label).arg(static_cast<int>(confidence * 100));
-        cv::putText(canvas, text.toStdString(), rect.tl() + cv::Point(0, -4),
+        cv::rectangle(canvas, proposal.rect, toScalar(objectColor), 2);
+        const QString text = QString("%1 %2%").arg(detection.label).arg(static_cast<int>(proposal.confidence * 100));
+        cv::putText(canvas, text.toStdString(), proposal.rect.tl() + cv::Point(0, -4),
             cv::FONT_HERSHEY_SIMPLEX, 0.5, toScalar(objectColor), 1, cv::LINE_AA);
     }
 
@@ -1175,7 +1482,8 @@ QVector<Detection> AIProcessor::stabilizeFaces(const QVector<Detection>& rawDete
             track.needsConfirmation = true;
             const bool allowAutoEnroll = autoEnrollEnabled
                 && (!autoEnrollTimer.isValid() || autoEnrollTimer.elapsed() >= autoEnrollCooldownMs);
-            if (allowAutoEnroll && track.stableLabel.isEmpty() && detIndex < faceCrops.size()) {
+            const bool trackMature = track.framesSinceConfirm >= trackConfirmationInterval;
+            if (allowAutoEnroll && track.stableLabel.isEmpty() && trackMature && detIndex < faceCrops.size()) {
                 std::vector<float> embedding = idx < frameEmbeddings.size() ? frameEmbeddings[idx] : std::vector<float>();
                 if (embedding.empty())
                     embedding = computeEmbedding(faceCrops[detIndex]);

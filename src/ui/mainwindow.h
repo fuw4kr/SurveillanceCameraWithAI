@@ -11,8 +11,10 @@
 #include "pages/CamerasPage.h"
 #include "pages/analyticsPage.h"
 #include "pages/faceDatabasePage.h"
+#include "pages/settingsPage.h"
 #include "../core/CameraManager.h"
 #include "../core/AIProcessor.h"
+#include "../core/modelSettings.h"
 #include <QWidget>
 #include <QMainWindow>
 #include <QListWidget>
@@ -42,12 +44,16 @@ private slots:
     void toggleSettingsPopup();
     void handleRecognitionSlider(int value);
     void handleGpuToggle(bool checked);
+    void onDetectionModelSelected(const QString& modelPath, const QString& configPath);
+    void onEmbeddingModelSelected(const QString& modelPath);
+    void onGenderModelSelected(const QString& modelPath);
 
 private:
     // === UI elements ===
     QWidget* titleBar;
     QLabel* IconName;
     QLabel* titleLabel;
+    QLabel* modelInfoLabel = nullptr;
     QPushButton* btnMinimize;
     QPushButton* btnMaximize;
     QPushButton* btnClose;
@@ -69,10 +75,17 @@ private:
     CamerasPage* camerasPage = nullptr;
     AnalyticsPage* analyticsPage = nullptr;
     FaceDatabasePage* faceDbPage = nullptr;
+    SettingsPage* settingsPage = nullptr;
     QString embedModelPath;
     QThread* aiThread = nullptr;
     int cachedRecognitionInterval = 500;
     bool cachedGpuPreference = true;
+    ModelSettings modelSettings;
+    QString currentDetectionModel;
+    QString currentDetectionConfig;
+    QString currentEmbeddingModel;
+    QString currentGenderModel;
+    QString modelsDirectory;
 
     // === Setup ===
     void setupUi();
@@ -82,6 +95,10 @@ private:
     void setupSidebar();
     void setupConsole();
     void setupConnections();
+    bool loadDetectionModel(const QString& modelPath, const QString& configPath, bool warnOnFailure = true);
+    bool loadEmbeddingModel(const QString& modelPath, bool warnOnFailure = true);
+    bool loadGenderModel(const QString& modelPath, bool warnOnFailure = true);
+    void updateModelInfoLabel();
 };
 
 #endif // MAINWINDOW_H

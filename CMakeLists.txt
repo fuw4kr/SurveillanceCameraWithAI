@@ -155,6 +155,7 @@ set(SOURCES
     src/ui/pages/camerasPage.cpp
     src/ui/pages/analyticsPage.cpp
     src/ui/pages/faceDatabasePage.cpp
+    src/ui/pages/settingsPage.cpp
     src/ui/widgets/cameraViewWidget.cpp
 
     
@@ -163,6 +164,7 @@ set(SOURCES
     src/core/AIProcessorONNX.cpp
     src/core/audioStreamPlayer.cpp
     src/core/FFVideoDecoder.cpp
+    src/core/modelSettings.cpp
 
 )
 
@@ -174,12 +176,14 @@ set(HEADERS
     src/ui/pages/camerasPage.h
     src/ui/pages/analyticsPage.h
     src/ui/pages/faceDatabasePage.h
+    src/ui/pages/settingsPage.h
     
     src/core/cameraManager.h
     src/core/AIProcessor.h
     src/core/AIProcessorONNX.h
     src/core/audioStreamPlayer.h
     src/core/FFVideoDecoder.h
+    src/core/modelSettings.h
     src/ui/widgets/cameraViewWidget.h
 )
 
