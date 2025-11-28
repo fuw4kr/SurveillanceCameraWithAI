@@ -10,9 +10,12 @@
 #include <QImage>
 #include <QMutex>
 #include <QMap>
-#include <QFuture>
-#include "AudioStreamPlayer.h"
-#include <opencv2/opencv.hpp>
+#include <QStringList>
+#include <memory>
+#include <atomic>
+
+#include "FFVideoDecoder.h"
+#include "audioStreamPlayer.h"
 
 class CameraManager : public QObject
 {
@@ -46,17 +49,18 @@ public slots:
 
 private:
     struct CameraStream {
-        cv::VideoCapture cap;
-        bool active = false;
         QString source;
-        AudioStreamPlayer* audioPlayer = nullptr;
+        QString resolvedSource;
+        std::unique_ptr<FFVideoDecoder> decoder;
+        std::unique_ptr<AudioStreamPlayer> audioPlayer;
+        std::atomic_bool capturing{ false };
     };
 
     mutable QMutex mutex;
-    QMap<int, CameraStream*> cameras;
+    QMap<int, std::shared_ptr<CameraStream>> cameras;
 
-    void captureLoop(int id);
-    static QImage matToQImage(const cv::Mat& mat);
+    QString normalizeSource(const QString& source) const;
+    QImage prepareFrame(const QImage& source) const;
 };
 
 #endif // CAMERAMANAGER_H

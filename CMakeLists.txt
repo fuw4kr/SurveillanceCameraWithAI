@@ -11,19 +11,54 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-if (NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    set(CMAKE_TOOLCHAIN_FILE "C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake"
+if (NOT DEFINED CMAKE_TOOLCHAIN_FILE AND DEFINED ENV{VCPKG_ROOT})
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
         CACHE STRING "Vcpkg toolchain file")
 endif()
 
-set(OpenCV_ROOT "${VCPKG_INSTALLED_DIR}/x64-windows/share/opencv4")
-    find_package(OpenCV REQUIRED)
+find_package(OpenCV REQUIRED)
 
 
 find_package(Qt6 COMPONENTS Widgets Charts Network OpenGL Multimedia Svg Concurrent REQUIRED)
 
-find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swresample)
+find_package(FFMPEG REQUIRED)
 include_directories(${FFMPEG_INCLUDE_DIRS})
+
+set(_ffmpeg_triplet "${VCPKG_TARGET_TRIPLET}")
+if (NOT _ffmpeg_triplet)
+    if (CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(_ffmpeg_triplet "x64-windows")
+    else()
+        set(_ffmpeg_triplet "x86-windows")
+    endif()
+endif()
+
+set(_ffmpeg_lib_hints
+    "${CMAKE_BINARY_DIR}/vcpkg_installed/${_ffmpeg_triplet}/lib"
+    "${CMAKE_BINARY_DIR}/vcpkg_installed/${_ffmpeg_triplet}/debug/lib"
+)
+if (DEFINED VCPKG_INSTALLED_DIR)
+    list(APPEND _ffmpeg_lib_hints
+        "${VCPKG_INSTALLED_DIR}/${_ffmpeg_triplet}/lib"
+        "${VCPKG_INSTALLED_DIR}/${_ffmpeg_triplet}/debug/lib")
+endif()
+
+find_library(FFMPEG_SWRESAMPLE_LIBRARY
+    NAMES swresample
+    HINTS ${_ffmpeg_lib_hints}
+)
+find_library(FFMPEG_SWSCALE_LIBRARY
+    NAMES swscale
+    HINTS ${_ffmpeg_lib_hints}
+)
+if (NOT FFMPEG_SWRESAMPLE_LIBRARY OR NOT FFMPEG_SWSCALE_LIBRARY)
+    message(FATAL_ERROR "Unable to locate FFmpeg swresample/swscale libraries. "
+        "Set VCPKG_INSTALLED_DIR or install FFmpeg dev files.")
+endif()
+list(APPEND FFMPEG_LIBRARIES
+    ${FFMPEG_SWRESAMPLE_LIBRARY}
+    ${FFMPEG_SWSCALE_LIBRARY}
+)
 
 # ONNX Runtime: prefer OpenVINO execution provider on Windows (via NuGet package)
 set(USE_ORT_OPENVINO ON CACHE BOOL "Fetch and use ONNX Runtime OpenVINO provider on Windows")
@@ -127,6 +162,7 @@ set(SOURCES
     src/core/AIProcessor.cpp
     src/core/AIProcessorONNX.cpp
     src/core/audioStreamPlayer.cpp
+    src/core/FFVideoDecoder.cpp
 
 )
 
@@ -143,6 +179,7 @@ set(HEADERS
     src/core/AIProcessor.h
     src/core/AIProcessorONNX.h
     src/core/audioStreamPlayer.h
+    src/core/FFVideoDecoder.h
     src/ui/widgets/cameraViewWidget.h
 )
 
@@ -154,17 +191,15 @@ add_executable(${PROJECT_NAME}
     ${HEADERS}
 )
 
-# === DEPLOY Qt platform plugin ===
-set(_QT_PLUGIN_PATH_DEBUG "C:/dev/vcpkg/packages/qtbase_x64-windows/debug/Qt6/plugins/platforms/qwindowsd.dll")
-set(_QT_PLUGIN_PATH_RELEASE "C:/dev/vcpkg/packages/qtbase_x64-windows/Qt6/plugins/platforms/qwindows.dll")
-
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/platforms"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<IF:$<CONFIG:Debug>,${_QT_PLUGIN_PATH_DEBUG},${_QT_PLUGIN_PATH_RELEASE}>"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/platforms/$<IF:$<CONFIG:Debug>,qwindowsd.dll,qwindows.dll>"
-)
+if (WIN32 AND TARGET Qt6::QWindowsIntegrationPlugin)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/platforms"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:Qt6::QWindowsIntegrationPlugin>"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/platforms/$<TARGET_FILE_NAME:Qt6::QWindowsIntegrationPlugin>"
+    )
+endif()
 
 if (ORT_OV_DLLS)
     foreach(_dll ${ORT_OV_DLLS})
@@ -183,11 +218,6 @@ endif()
 # === Лінкування бібліотек
 # ======================================================
 target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
-target_link_directories(${PROJECT_NAME} PRIVATE 
-    "${VCPKG_INSTALLED_DIR}/x64-windows/lib"
-    "${VCPKG_INSTALLED_DIR}/x64-windows/debug/lib"
-)
-
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
@@ -200,10 +230,6 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Charts
     ${OpenCV_LIBS}
     ${FFMPEG_LIBRARIES}
-    avcodec
-    avformat
-    avutil
-    swresample
     ${ONNX_RUNTIME_TARGET}
 )
 
