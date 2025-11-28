@@ -7,14 +7,27 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: write
+  actions: write
+  checks: write
+
 jobs:
   build:
     runs-on: windows-latest
     env:
       BUILD_TYPE: Release
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Export GitHub cache env
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -29,28 +42,36 @@ jobs:
         shell: pwsh
         run: >
           cmake -B build -S .
-          -DCMAKE_BUILD_TYPE=$env:BUILD_TYPE
-          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake"
           -DVCPKG_TARGET_TRIPLET=x64-windows
           -G Ninja
 
       - name: Build
         shell: pwsh
-        run: cmake --build build --config $env:BUILD_TYPE
+        run: cmake --build build
 
       - name: Package artifact
         shell: pwsh
         run: |
           $dist = "dist"
           New-Item -ItemType Directory -Path $dist -Force | Out-Null
-          $exe = Join-Path "build" "SurveillanceCameraWithAI.exe"
-          if (-not (Test-Path $exe)) {
-            $exe = Join-Path "build" "Release/SurveillanceCameraWithAI.exe"
+          $exeName = "SurveillanceCameraWithAI.exe"
+          $exePath = Join-Path "build" $exeName
+          if (-not (Test-Path $exePath)) {
+            $exePath = Join-Path "build" ("Release/" + $exeName)
           }
-          if (-not (Test-Path $exe)) {
-            throw "Executable not found at $exe"
+          if (-not (Test-Path $exePath)) {
+            Write-Host "::error::Executable not found. Listing build directory for debugging."
+            Get-ChildItem -Path "build" -Recurse
+            throw "Executable not found at expected locations."
           }
-          Copy-Item $exe (Join-Path $dist "SurveillanceCameraWithAI.exe") -Force
+          Copy-Item $exePath (Join-Path $dist $exeName) -Force
+          
+          if (Test-Path "build/bin/*.dll") {
+            Copy-Item "build/bin/*.dll" $dist -Force
+          }
+          
           Compress-Archive -Path (Join-Path $dist '*') -DestinationPath SurveillanceCameraWithAI-win64.zip -Force
 
       - name: Upload artifact
