@@ -1,0 +1,132 @@
+QMainWindow {
+    background-color: #f9fafb;
+    color: #1f2937;
+}
+
+QWidget#titleBar {
+    background-color: #f3f4f6;
+    border-bottom: 1px solid #d1d5db;
+}
+
+QLabel#titleLabel {
+    color: #111827;
+    font-weight: 600;
+}
+
+QLabel#IconName {
+    color: #6b7280;
+}
+
+QPushButton {
+    background: #eef2f7;
+    color: #111827;
+    border: 1px solid #d1d5db;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+QPushButton:hover {
+    background-color: #e5e7eb;
+    border-color: #93c5fd;
+    color: #0f172a;
+}
+
+QPushButton:pressed {
+    background-color: #d7e0ee;
+    border-color: #60a5fa;
+    color: #0b1b39;
+}
+
+QPushButton:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background-color: #e0e7ff;
+}
+
+QPushButton:disabled {
+    background: #f3f4f6;
+    color: #9ca3af;
+    border-color: #e5e7eb;
+}
+
+QPushButton#btnClose {
+    background-color: #fff1f2;
+    border-color: #fecdd3;
+}
+
+QPushButton#btnClose:hover {
+    background-color: #fee2e2;
+    color: #b91c1c;
+    border-color: #fca5a5;
+}
+
+QPushButton#btnThemeToggle {
+    background-color: #e5e7eb;
+    border-color: #d1d5db;
+}
+
+QPushButton#btnThemeToggle:hover {
+    background-color: #dbeafe;
+    border-color: #93c5fd;
+}
+
+QListWidget#listModes {
+    background: #ffffff;
+    color: #111827;
+    border: none;
+}
+
+QListWidget#listModes::item {
+    padding: 8px 12px;
+}
+
+QListWidget#listModes::item:selected {
+    background: #bfdbfe;
+    color: #1d4ed8;
+    border-left: 3px solid #3b82f6;
+}
+
+QListView#consoleView {
+    background: #f3f4f6;
+    color: #065f46;
+    font-family: Consolas;
+    font-size: 13px;
+    border-top: 1px solid #d1d5db;
+}
+
+QWidget#settingsPopup {
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+}
+
+QLabel {
+    color: #111827;
+}
+
+QLabel#recognitionLabel {
+    font-weight: 600;
+}
+
+QLabel#recognitionValueLabel {
+    color: #374151;
+}
+
+QSlider::groove:horizontal {
+    height: 6px;
+    background: #e5e7eb;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background: #2563eb;
+    width: 12px;
+    border-radius: 6px;
+    margin: -4px 0;
+}
+
+QCheckBox {
+    color: #111827;
+}

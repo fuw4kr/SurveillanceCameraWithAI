@@ -148,6 +148,7 @@ endif()
 # ======================================================
 set(SOURCES
     src/main.cpp
+    src/resources.qrc
     src/ui/mainwindow.cpp
     src/ui/windowEdit/framelessWindow.cpp
     src/ui/windowEdit/snapPreviewWindow.cpp
