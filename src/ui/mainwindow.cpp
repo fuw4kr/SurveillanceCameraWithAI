@@ -201,25 +201,6 @@ void MainWindow::setupUi()
     if (currentEmbeddingModel.isEmpty() && !defaultEmbeddingModel.isEmpty())
         loadEmbeddingModel(defaultEmbeddingModel);
 
-    QStringList genderCandidates;
-    appendCandidates(genderCandidates, "/assets/models/genderage.onnx");
-    appendCandidates(genderCandidates, "/assets/models/buffalo_s/genderage.onnx");
-    const QString defaultGenderModel = pickPath(genderCandidates);
-
-    QString desiredGenderModel = ModelSettings::resolvePath(modelSettings.genderModel);
-    if (desiredGenderModel.isEmpty())
-        desiredGenderModel = defaultGenderModel;
-
-    const auto tryGender = [&](const QString& model) -> bool {
-        if (model.isEmpty())
-            return false;
-        return loadGenderModel(model, false);
-    };
-
-    if (!tryGender(desiredGenderModel) && defaultGenderModel != desiredGenderModel)
-        tryGender(defaultGenderModel);
-    if (currentGenderModel.isEmpty() && !defaultGenderModel.isEmpty())
-        loadGenderModel(defaultGenderModel);
     updateModelInfoLabel();
     cachedRecognitionInterval = aiProcessor ? aiProcessor->recognitionInterval() : cachedRecognitionInterval;
     cachedGpuPreference = aiProcessor ? aiProcessor->prefersGpuForEmbeddings() : cachedGpuPreference;
@@ -262,7 +243,7 @@ void MainWindow::setupUi()
     });
 
     if (settingsPage)
-        settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel, currentGenderModel);
+        settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel);
 
     listModes->setCurrentRow(0);
 }
@@ -395,8 +376,6 @@ void MainWindow::setupConnections()
             this, &MainWindow::onDetectionModelSelected);
         connect(settingsPage, &SettingsPage::embeddingModelSelected,
             this, &MainWindow::onEmbeddingModelSelected);
-        connect(settingsPage, &SettingsPage::genderModelSelected,
-            this, &MainWindow::onGenderModelSelected);
     }
 }
 
@@ -488,7 +467,7 @@ void MainWindow::onDetectionModelSelected(const QString& modelPath, const QStrin
     modelSettings.detectionConfig = ModelSettings::toRelative(currentDetectionConfig);
     modelSettings.save();
     if (settingsPage)
-        settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel, currentGenderModel);
+        settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel);
 }
 
 void MainWindow::onEmbeddingModelSelected(const QString& modelPath)
@@ -498,17 +477,7 @@ void MainWindow::onEmbeddingModelSelected(const QString& modelPath)
     modelSettings.embeddingModel = ModelSettings::toRelative(currentEmbeddingModel);
     modelSettings.save();
     if (settingsPage)
-        settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel, currentGenderModel);
-}
-
-void MainWindow::onGenderModelSelected(const QString& modelPath)
-{
-    if (!loadGenderModel(modelPath))
-        return;
-    modelSettings.genderModel = ModelSettings::toRelative(currentGenderModel);
-    modelSettings.save();
-    if (settingsPage)
-        settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel, currentGenderModel);
+        settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel);
 }
 
 bool MainWindow::loadDetectionModel(const QString& modelPath, const QString& configPath, bool warnOnFailure)
@@ -563,29 +532,6 @@ bool MainWindow::loadEmbeddingModel(const QString& modelPath, bool warnOnFailure
     return true;
 }
 
-bool MainWindow::loadGenderModel(const QString& modelPath, bool warnOnFailure)
-{
-    if (!aiProcessor || modelPath.isEmpty()) {
-        if (warnOnFailure)
-            QMessageBox::warning(this, tr("Gender/Age"), tr("Please select a valid gender/age model."));
-        return false;
-    }
-
-    const QString resolvedModel = ModelSettings::resolvePath(modelPath);
-    if (!aiProcessor->loadGenderAgeModel(resolvedModel)) {
-        if (warnOnFailure) {
-            QMessageBox::warning(this, tr("Gender/Age"),
-                tr("Failed to load gender/age model:\n%1").arg(resolvedModel));
-        }
-        return false;
-    }
-
-    currentGenderModel = resolvedModel;
-    updateModelInfoLabel();
-    qInfo() << "Gender/Age model loaded:" << resolvedModel;
-    return true;
-}
-
 void MainWindow::updateModelInfoLabel()
 {
     if (!modelInfoLabel)
@@ -598,8 +544,7 @@ void MainWindow::updateModelInfoLabel()
     };
 
     modelInfoLabel->setText(
-        tr("Det: %1 | Emb: %2 | GA: %3")
+        tr("Det: %1 | Emb: %2")
             .arg(toLabel(currentDetectionModel),
-                toLabel(currentEmbeddingModel),
-                toLabel(currentGenderModel)));
+                toLabel(currentEmbeddingModel)));
 }

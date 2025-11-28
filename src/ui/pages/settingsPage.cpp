@@ -32,11 +32,10 @@ SettingsPage::SettingsPage(const QString& modelsDirectory, QWidget* parent)
     populateModelLists();
 }
 
-void SettingsPage::setCurrentModels(const QString& detectionModel, const QString& detectionConfig, const QString& embeddingModel, const QString& genderModel)
+void SettingsPage::setCurrentModels(const QString& detectionModel, const QString& detectionConfig, const QString& embeddingModel)
 {
     QSignalBlocker blockerDet(detectionCombo);
     QSignalBlocker blockerEmb(embeddingCombo);
-    QSignalBlocker blockerGender(genderCombo);
 
     const int detIndex = findDetectionIndex(detectionModel, detectionConfig);
     if (detIndex >= 0)
@@ -46,11 +45,7 @@ void SettingsPage::setCurrentModels(const QString& detectionModel, const QString
     if (embIndex >= 0)
         embeddingCombo->setCurrentIndex(embIndex);
 
-    const int genIndex = findGenderIndex(genderModel);
-    if (genIndex >= 0)
-        genderCombo->setCurrentIndex(genIndex);
-
-    updatePathLabels(detectionCombo->currentIndex(), embeddingCombo->currentIndex(), genderCombo->currentIndex());
+    updatePathLabels(detectionCombo->currentIndex(), embeddingCombo->currentIndex());
 }
 
 void SettingsPage::buildUi()
@@ -101,28 +96,8 @@ void SettingsPage::buildUi()
     embeddingPathLabel->setWordWrap(true);
     embedLayout->addRow(tr("Path"), embeddingPathLabel);
 
-    auto* genderGroup = new QGroupBox(tr("Gender & Age Model"));
-    auto* genderLayout = new QFormLayout(genderGroup);
-    genderCombo = new QComboBox;
-    genderCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    connect(genderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-        this, &SettingsPage::onGenderChanged);
-
-    auto* genderRow = new QHBoxLayout;
-    genderRow->addWidget(genderCombo, 1);
-    auto* browseGender = new QPushButton(tr("Browse..."));
-    connect(browseGender, &QPushButton::clicked, this, &SettingsPage::onBrowseGender);
-    genderRow->addWidget(browseGender);
-    genderLayout->addRow(tr("Model"), genderRow);
-
-    genderPathLabel = new QLabel;
-    genderPathLabel->setStyleSheet(QStringLiteral("color:#8b949e; font-size:12px;"));
-    genderPathLabel->setWordWrap(true);
-    genderLayout->addRow(tr("Path"), genderPathLabel);
-
     layout->addWidget(faceGroup);
     layout->addWidget(embedGroup);
-    layout->addWidget(genderGroup);
     layout->addStretch();
 }
 
@@ -130,10 +105,8 @@ void SettingsPage::populateModelLists()
 {
     detectionEntries.clear();
     embeddingEntries.clear();
-    genderEntries.clear();
     detectionCombo->clear();
     embeddingCombo->clear();
-    genderCombo->clear();
 
     QDir dir(modelsDir);
     if (!dir.exists())
@@ -145,6 +118,8 @@ void SettingsPage::populateModelLists()
     while (it.hasNext()) {
         QFileInfo info(it.next());
         const QString fileNameLower = info.fileName().toLower();
+        if (fileNameLower.contains(QStringLiteral("genderage")))
+            continue;
         const QString absPath = normalized(info.absoluteFilePath());
         if (isDetectionModel(fileNameLower)) {
             QString configPath;
@@ -161,8 +136,6 @@ void SettingsPage::populateModelLists()
                     continue;
             }
             addDetectionEntry(detectionLabelFor(info.fileName()), absPath, normalized(configPath));
-        } else if (isGenderModel(fileNameLower)) {
-            addGenderEntry(info.completeBaseName(), absPath);
         } else {
             addEmbeddingEntry(info.completeBaseName(), absPath);
         }
@@ -172,8 +145,6 @@ void SettingsPage::populateModelLists()
         detectionCombo->addItem(tr("No face detectors found"));
     if (embeddingEntries.isEmpty())
         embeddingCombo->addItem(tr("No embedding models found"));
-    if (genderEntries.isEmpty())
-        genderCombo->addItem(tr("No gender/age models found"));
 }
 
 void SettingsPage::onDetectionChanged(int index)
@@ -181,7 +152,7 @@ void SettingsPage::onDetectionChanged(int index)
     if (index < 0 || index >= detectionEntries.size())
         return;
     const auto& entry = detectionEntries.at(index);
-    updatePathLabels(index, embeddingCombo->currentIndex(), genderCombo->currentIndex());
+    updatePathLabels(index, embeddingCombo->currentIndex());
     emit detectionModelSelected(entry.modelPath, entry.configPath);
 }
 
@@ -190,17 +161,8 @@ void SettingsPage::onEmbeddingChanged(int index)
     if (index < 0 || index >= embeddingEntries.size())
         return;
     const auto& entry = embeddingEntries.at(index);
-    updatePathLabels(detectionCombo->currentIndex(), index, genderCombo->currentIndex());
+    updatePathLabels(detectionCombo->currentIndex(), index);
     emit embeddingModelSelected(entry.path);
-}
-
-void SettingsPage::onGenderChanged(int index)
-{
-    if (index < 0 || index >= genderEntries.size())
-        return;
-    const auto& entry = genderEntries.at(index);
-    updatePathLabels(detectionCombo->currentIndex(), embeddingCombo->currentIndex(), index);
-    emit genderModelSelected(entry.path);
 }
 
 void SettingsPage::onBrowseDetection()
@@ -240,20 +202,7 @@ void SettingsPage::onBrowseEmbedding()
     emit embeddingModelSelected(modelPath);
 }
 
-void SettingsPage::onBrowseGender()
-{
-    const QString file = QFileDialog::getOpenFileName(this, tr("Select Gender/Age Model"),
-        modelsDir, tr("ONNX Models (*.onnx);;All Files (*.*)"));
-    if (file.isEmpty())
-        return;
-    const QString modelPath = normalized(file);
-    addGenderEntry(QFileInfo(file).completeBaseName(), modelPath);
-    const int newIndex = genderEntries.size() - 1;
-    genderCombo->setCurrentIndex(newIndex);
-    emit genderModelSelected(modelPath);
-}
-
-void SettingsPage::updatePathLabels(int detectionIndex, int embeddingIndex, int genderIndex)
+void SettingsPage::updatePathLabels(int detectionIndex, int embeddingIndex)
 {
     if (detectionIndex >= 0 && detectionIndex < detectionEntries.size()) {
         const auto& entry = detectionEntries.at(detectionIndex);
@@ -269,11 +218,6 @@ void SettingsPage::updatePathLabels(int detectionIndex, int embeddingIndex, int 
         embeddingPathLabel->setText(embeddingEntries.at(embeddingIndex).path);
     else
         embeddingPathLabel->clear();
-
-    if (genderIndex >= 0 && genderIndex < genderEntries.size())
-        genderPathLabel->setText(genderEntries.at(genderIndex).path);
-    else
-        genderPathLabel->clear();
 }
 
 void SettingsPage::addDetectionEntry(const QString& label, const QString& modelPath, const QString& configPath)
@@ -292,15 +236,6 @@ void SettingsPage::addEmbeddingEntry(const QString& label, const QString& modelP
     ModelEntry entry { label, modelPath };
     embeddingEntries.append(entry);
     embeddingCombo->addItem(label);
-}
-
-void SettingsPage::addGenderEntry(const QString& label, const QString& modelPath)
-{
-    if (findGenderIndex(modelPath) >= 0)
-        return;
-    ModelEntry entry { label, modelPath };
-    genderEntries.append(entry);
-    genderCombo->addItem(label);
 }
 
 int SettingsPage::findDetectionIndex(const QString& modelPath, const QString& configPath) const
@@ -325,16 +260,6 @@ int SettingsPage::findEmbeddingIndex(const QString& modelPath) const
     return -1;
 }
 
-int SettingsPage::findGenderIndex(const QString& modelPath) const
-{
-    const QString normalizedModel = normalized(modelPath);
-    for (int i = 0; i < genderEntries.size(); ++i) {
-        if (normalized(genderEntries[i].path) == normalizedModel)
-            return i;
-    }
-    return -1;
-}
-
 bool SettingsPage::isDetectionModel(const QString& fileName)
 {
     const QString lower = fileName.toLower();
@@ -354,12 +279,4 @@ QString SettingsPage::detectionLabelFor(const QString& fileName)
 {
     QFileInfo info(fileName);
     return info.completeBaseName();
-}
-
-bool SettingsPage::isGenderModel(const QString& fileName)
-{
-    const QString lower = fileName.toLower();
-    if (!lower.endsWith(QStringLiteral(".onnx")))
-        return false;
-    return lower.contains(QStringLiteral("gender")) || lower.contains(QStringLiteral("age"));
 }

@@ -33,7 +33,6 @@ ModelSettings ModelSettings::load()
     settings.detectionModel = obj.value(QStringLiteral("detectionModel")).toString();
     settings.detectionConfig = obj.value(QStringLiteral("detectionConfig")).toString();
     settings.embeddingModel = obj.value(QStringLiteral("embeddingModel")).toString();
-    settings.genderModel = obj.value(QStringLiteral("genderModel")).toString();
     return settings;
 }
 
@@ -48,7 +47,6 @@ bool ModelSettings::save() const
     obj.insert(QStringLiteral("detectionModel"), normalizedPath(detectionModel));
     obj.insert(QStringLiteral("detectionConfig"), normalizedPath(detectionConfig));
     obj.insert(QStringLiteral("embeddingModel"), normalizedPath(embeddingModel));
-    obj.insert(QStringLiteral("genderModel"), normalizedPath(genderModel));
 
     QFile file(info.absoluteFilePath());
     if (!file.open(QIODevice::WriteOnly))

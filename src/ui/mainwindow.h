@@ -46,7 +46,6 @@ private slots:
     void handleGpuToggle(bool checked);
     void onDetectionModelSelected(const QString& modelPath, const QString& configPath);
     void onEmbeddingModelSelected(const QString& modelPath);
-    void onGenderModelSelected(const QString& modelPath);
 
 private:
     // === UI elements ===
@@ -84,7 +83,6 @@ private:
     QString currentDetectionModel;
     QString currentDetectionConfig;
     QString currentEmbeddingModel;
-    QString currentGenderModel;
     QString modelsDirectory;
 
     // === Setup ===
@@ -97,7 +95,6 @@ private:
     void setupConnections();
     bool loadDetectionModel(const QString& modelPath, const QString& configPath, bool warnOnFailure = true);
     bool loadEmbeddingModel(const QString& modelPath, bool warnOnFailure = true);
-    bool loadGenderModel(const QString& modelPath, bool warnOnFailure = true);
     void updateModelInfoLabel();
 };
 

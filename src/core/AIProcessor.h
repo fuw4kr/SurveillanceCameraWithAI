@@ -32,7 +32,6 @@ struct Detection
     float confidence = 0.0f;
     QColor color = QColor(255, 255, 255);
     QString previewPath; // optional path to enrolled face crop
-    QString demographics; // e.g. gender/age annotation
 };
 
 struct ProcessedFrame
@@ -65,7 +64,6 @@ public:
 
     bool loadFaceModel(const QString& modelPath, const QString& configPath = QString());
     bool loadObjectModel(const QString& modelPath, const QString& configPath = QString());
-    bool loadGenderAgeModel(const QString& modelPath);
     int recognitionInterval() const { return recognitionIntervalMs; }
     void resetBackground();
     bool loadKnownEmbeddings(const QString& jsonPath); // e.g. config/embeddings.json
@@ -134,7 +132,6 @@ private:
     QVector<Detection> detectObjects(const cv::Mat& frame, cv::Mat& canvas, const std::vector<ObjectProposal>& proposals);
     QVector<Detection> detectPersons(const cv::Mat& frame, cv::Mat& canvas, const std::vector<ObjectProposal>& proposals);
     std::vector<ObjectProposal> inferObjects(const cv::Mat& frame);
-    QString inferGenderAge(const cv::Mat& face);
     bool claimRecognitionSlot();
     bool isRecognitionReady() const;
     bool isRecognitionRateLimited() const { return recognitionIntervalMs > 0; }
@@ -169,7 +166,6 @@ private:
     cv::Ptr<cv::FaceDetectorYN> yuNetDetector;
     FaceDetectorMode faceDetectorMode = FaceDetectorMode::None;
     cv::dnn::Net objectNet;
-    cv::dnn::Net genderAgeNet;
     cv::HOGDescriptor personHog;
 
     float faceThreshold = 0.65f;
@@ -180,6 +176,7 @@ private:
     QColor recognizedFaceColor = QColor(34, 197, 94); // green for matched embedding
     QColor personColor = QColor(59, 130, 246);
     float recognitionThreshold = 0.60f; // cosine similarity threshold for a match
+    float recognitionSoftThreshold = 0.45f; // accept as candidate above this score
 
     // ONNX Runtime embedding model (ArcFace/MobileFaceNet/SFace/FaceNet)
     std::unique_ptr<AIProcessorONNX> embedEngine;

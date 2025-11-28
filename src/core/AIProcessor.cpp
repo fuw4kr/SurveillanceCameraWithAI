@@ -230,32 +230,6 @@ void AIProcessor::setObjectConfidence(float threshold)
     objectThreshold = std::clamp(threshold, 0.05f, 0.99f);
 }
 
-bool AIProcessor::loadGenderAgeModel(const QString& modelPath)
-{
-    const QString resolved = resolvePath(modelPath);
-    genderAgeNet = cv::dnn::Net();
-    if (resolved.isEmpty()) {
-        qWarning() << "Gender/Age model path is empty";
-        return false;
-    }
-
-    try {
-        genderAgeNet = cv::dnn::readNet(resolved.toStdString());
-        if (genderAgeNet.empty()) {
-            qWarning() << "Failed to load gender/age model from" << resolved;
-            return false;
-        }
-        genderAgeNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
-        genderAgeNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-        qInfo() << "Gender/Age model loaded from" << resolved;
-        return true;
-    } catch (const cv::Exception& ex) {
-        qWarning() << "Failed to load gender/age model:" << ex.what();
-        genderAgeNet = cv::dnn::Net();
-        return false;
-    }
-}
-
 void AIProcessor::setRecognitionIntervalMs(int interval)
 {
     const int newInterval = std::max(-1, interval);
@@ -832,16 +806,14 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
             if (padded.empty())
                 continue;
 
-        Detection detection;
-        detection.label = QStringLiteral("Face");
-        detection.category = QStringLiteral("Face");
-        detection.confidence = score;
-        detection.rect = toRect(padded, frame.size());
-        detection.color = faceColor;
-        if (!genderAgeNet.empty())
-            detection.demographics = inferGenderAge(frame(padded));
-        detections.append(detection);
-        faceCrops.append(frame(padded).clone());
+            Detection detection;
+            detection.label = QStringLiteral("Face");
+            detection.category = QStringLiteral("Face");
+            detection.confidence = score;
+            detection.rect = toRect(padded, frame.size());
+            detection.color = faceColor;
+            detections.append(detection);
+            faceCrops.append(frame(padded).clone());
         }
 
         detections = stabilizeFaces(detections, faceCrops, cameraId);
@@ -853,8 +825,6 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
             QString textLabel = detection.confidence > 0.0f
                 ? QString("%1 %2%").arg(detection.label).arg(static_cast<int>(detection.confidence * 100))
                 : detection.label;
-            if (!detection.demographics.isEmpty())
-                textLabel += QStringLiteral(" (%1)").arg(detection.demographics);
             cv::rectangle(canvas, rect, toScalar(detection.color), 2);
             const int textY = std::min(rect.y + rect.height + 18, frame.rows - 4);
             cv::putText(canvas, textLabel.toStdString(), cv::Point(rect.x, textY),
@@ -904,8 +874,6 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
         detection.confidence = confidence;
         detection.rect = toRect(padded, frame.size());
         detection.color = faceColor;
-        if (!genderAgeNet.empty())
-            detection.demographics = inferGenderAge(frame(padded));
         detections.append(detection);
         faceCrops.append(frame(padded).clone());
     }
@@ -920,8 +888,6 @@ QVector<Detection> AIProcessor::detectFaces(const cv::Mat& frame, cv::Mat& canva
         QString textLabel = detection.confidence > 0.0f
             ? QString("%1 %2%").arg(detection.label).arg(static_cast<int>(detection.confidence * 100))
             : detection.label;
-        if (!detection.demographics.isEmpty())
-            textLabel += QStringLiteral(" (%1)").arg(detection.demographics);
         cv::rectangle(canvas, rect, toScalar(detection.color), 2);
         const int textY = std::min(rect.y + rect.height + 18, frame.rows - 4);
         cv::putText(canvas, textLabel.toStdString(), cv::Point(rect.x, textY),
@@ -974,111 +940,6 @@ std::vector<AIProcessor::ObjectProposal> AIProcessor::inferObjects(const cv::Mat
     }
 
     return proposals;
-}
-
-QString AIProcessor::inferGenderAge(const cv::Mat& face)
-{
-    if (face.empty() || genderAgeNet.empty())
-        return {};
-
-    cv::Mat resized;
-    cv::resize(face, resized, cv::Size(112, 112));
-    cv::Mat blob = cv::dnn::blobFromImage(resized, 1.0 / 255.0, cv::Size(112, 112));
-
-    std::vector<cv::Mat> outputs;
-    try {
-        genderAgeNet.setInput(blob);
-        genderAgeNet.forward(outputs, genderAgeNet.getUnconnectedOutLayersNames());
-    } catch (const cv::Exception& ex) {
-        qWarning() << "Gender/Age inference failed:" << ex.what();
-        return {};
-    }
-
-    auto interpretGender = [](const cv::Mat& mat) -> std::pair<QString, float> {
-        if (mat.total() < 2)
-            return { {}, 0.0f };
-        cv::Mat reshaped = mat.reshape(1, 1);
-        double maxVal = 0.0;
-        cv::Point maxLoc;
-        cv::minMaxLoc(reshaped, nullptr, &maxVal, nullptr, &maxLoc);
-        const int idx = maxLoc.x;
-        static const QStringList labels = { QStringLiteral("Female"), QStringLiteral("Male") };
-        if (labels.isEmpty())
-            return { QStringLiteral("Unknown"), static_cast<float>(maxVal) };
-        const int maxIndex = static_cast<int>(labels.size()) - 1;
-        const int clamped = std::clamp(idx, 0, maxIndex);
-        const QString gender = labels.value(clamped, QStringLiteral("Unknown"));
-        return { gender, static_cast<float>(maxVal) };
-    };
-
-    auto interpretAge = [](const cv::Mat& mat) -> int {
-        if (mat.empty())
-            return -1;
-        cv::Mat flat = mat.reshape(1, 1);
-        if (flat.total() == 1) {
-            const float value = flat.at<float>(0);
-            if (!std::isfinite(value))
-                return -1;
-            return std::clamp(static_cast<int>(std::round(value)), 1, 99);
-        }
-
-        double weighted = 0.0;
-        double total = 0.0;
-        for (int i = 0; i < flat.cols; ++i) {
-            const float prob = flat.at<float>(0, i);
-            if (!std::isfinite(prob) || prob <= 0.0f)
-                continue;
-            weighted += prob * i;
-            total += prob;
-        }
-        if (total <= std::numeric_limits<double>::epsilon())
-            return -1;
-        const double value = weighted / total;
-        return std::clamp(static_cast<int>(std::round(value)), 1, 99);
-    };
-
-    cv::Mat genderMat;
-    cv::Mat ageMat;
-
-    if (outputs.empty()) {
-        outputs.emplace_back(genderAgeNet.forward());
-    }
-
-    if (outputs.size() >= 2) {
-        ageMat = outputs[0];
-        genderMat = outputs[1];
-    } else if (!outputs.empty()) {
-        cv::Mat fused = outputs[0].reshape(1, 1);
-        if (fused.cols >= 2) {
-            genderMat = fused.colRange(fused.cols - 2, fused.cols).clone();
-            ageMat = fused.colRange(0, fused.cols - 2).clone();
-        } else {
-            genderMat = fused;
-        }
-    }
-
-    QString genderText;
-    float genderConfidence = 0.0f;
-    int ageYears = -1;
-
-    if (!genderMat.empty())
-        std::tie(genderText, genderConfidence) = interpretGender(genderMat);
-    if (!ageMat.empty()) {
-        if (ageMat.total() == 1) {
-            const float value = ageMat.at<float>(0);
-            if (std::isfinite(value))
-                ageYears = std::clamp(static_cast<int>(std::round(value * 100.0f)), 1, 99);
-        } else {
-            ageYears = interpretAge(ageMat);
-        }
-    }
-
-    if (genderText.isEmpty())
-        return {};
-
-    if (ageYears > 0)
-        return QStringLiteral("%1, %2").arg(genderText, QString::number(ageYears));
-    return genderText;
 }
 
 QVector<Detection> AIProcessor::detectPersons(const cv::Mat& frame, cv::Mat& canvas, const std::vector<ObjectProposal>& proposals)
@@ -1466,23 +1327,35 @@ QVector<Detection> AIProcessor::stabilizeFaces(const QVector<Detection>& rawDete
         FaceTrack& track = tracks[trackId];
 
         bool recognized = false;
-        if (!knownSnapshot.empty() && idx < matchedProfiles.size()) {
-            const int profileIndex = matchedProfiles[idx];
-            const float similarity = idx < matchedSimilarities.size() ? matchedSimilarities[idx] : -1.0f;
-            if (profileIndex >= 0 && similarity >= recognitionThreshold) {
-                const auto& profile = knownSnapshot[profileIndex];
+        bool suppressAutoEnroll = false;
+        const int profileIndex = (idx < matchedProfiles.size()) ? matchedProfiles[idx] : -1;
+        const float similarity = (idx < matchedSimilarities.size()) ? matchedSimilarities[idx] : -1.0f;
+        if (!knownSnapshot.empty() && profileIndex >= 0) {
+            const auto& profile = knownSnapshot[profileIndex];
+            if (similarity >= recognitionThreshold) {
                 applyTrackLabel(track, profile.name, similarity, profile.previewPath);
                 track.needsConfirmation = false;
                 track.framesSinceConfirm = 0;
+                suppressAutoEnroll = true;
                 recognized = true;
+            } else if (similarity >= recognitionSoftThreshold) {
+                suppressAutoEnroll = true;
+                applyTrackLabel(track, profile.name, similarity, profile.previewPath);
+                if (track.stableLabel == profile.name) {
+                    track.needsConfirmation = false;
+                    track.framesSinceConfirm = 0;
+                    recognized = true;
+                }
             }
         }
 
         if (!recognized) {
             track.needsConfirmation = true;
-            const bool allowAutoEnroll = autoEnrollEnabled
+            bool allowAutoEnroll = autoEnrollEnabled
                 && (!autoEnrollTimer.isValid() || autoEnrollTimer.elapsed() >= autoEnrollCooldownMs);
             const bool trackMature = track.framesSinceConfirm >= trackConfirmationInterval;
+            if (suppressAutoEnroll)
+                allowAutoEnroll = false;
             if (allowAutoEnroll && track.stableLabel.isEmpty() && trackMature && detIndex < faceCrops.size()) {
                 std::vector<float> embedding = idx < frameEmbeddings.size() ? frameEmbeddings[idx] : std::vector<float>();
                 if (embedding.empty())

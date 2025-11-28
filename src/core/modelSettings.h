@@ -7,7 +7,6 @@ struct ModelSettings {
     QString detectionModel;
     QString detectionConfig;
     QString embeddingModel;
-    QString genderModel;
 
     static ModelSettings load();
     bool save() const;
