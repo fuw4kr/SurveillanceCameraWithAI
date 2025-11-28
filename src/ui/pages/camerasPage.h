@@ -8,18 +8,13 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QHash>
+#include <QSet>
 #include <QMutex>
 #include <atomic>
 #include <QImage>
 #include "../../core/CameraManager.h"
 #include "../../core/AIProcessor.h"
 #include "../widgets/cameraViewWidget.h"
-
-struct CameraDetectionState {
-    QVector<Detection> detections;
-    QSize sourceSize;
-    bool pending = false;
-};
 
 class CamerasPage : public QWidget
 {
@@ -40,8 +35,13 @@ private slots:
 private:
     CameraManager* cameraManager;
     AIProcessor* aiProcessor = nullptr;
+    struct CameraProcessingState {
+        bool pending = false;
+        bool hasAnnotated = false;
+    };
+
     QHash<int, CameraViewWidget*> cameraWidgets;
-    QHash<int, CameraDetectionState> detectionStates;
+    QHash<int, CameraProcessingState> cameraStates;
     QList<int> cameraOrder;
 
     QWidget* gridContainer;
@@ -66,9 +66,6 @@ private:
     void setupUi();
     void updateGrid();
     void addCameraSource(const QString& source, const QString& title);
-    cv::Mat imageToMat(const QImage& image) const;
-    QImage matToImage(const cv::Mat& mat) const;
-    QImage composeFrame(const QImage& frame, const QVector<Detection>& detections, const QSize& sourceSize, const QSize& targetSize) const;
 };
 
 #endif // CAMERASPAGE_H

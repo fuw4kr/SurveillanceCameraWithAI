@@ -1,7 +1,13 @@
-﻿#include "CameraManager.h"
-#include <QtConcurrent/QtConcurrent>
-#include <QThread>
+#include "CameraManager.h"
+
+#include <QCameraDevice>
+#include <QMediaDevices>
+#include <QMutexLocker>
 #include <QDebug>
+
+namespace {
+constexpr int kMaxDisplayHeight = 720;
+}
 
 CameraManager::CameraManager(QObject* parent)
     : QObject(parent)
@@ -16,12 +22,12 @@ CameraManager::~CameraManager()
 QStringList CameraManager::listAvailableCameras()
 {
     QStringList available;
-    for (int i = 0; i < 10; ++i) {
-        cv::VideoCapture testCap(i);
-        if (testCap.isOpened()) {
-            available << QString("Camera #%1").arg(i);
-            testCap.release();
-        }
+    const auto devices = QMediaDevices::videoInputs();
+    for (int i = 0; i < devices.size(); ++i) {
+        QString label = devices.at(i).description();
+        if (label.isEmpty())
+            label = tr("Camera #%1").arg(i);
+        available << label;
     }
     return available;
 }
@@ -35,74 +41,103 @@ bool CameraManager::openCamera(int id, const QString& source)
         return true;
     }
 
-    auto* stream = new CameraStream;
-    stream->source = source;
-
-    // === визначаємо тип ===
-    bool ok = false;
-    int camIndex = source.toInt(&ok);
-
-    if (ok) { // локальна камера
-        if (!stream->cap.open(camIndex)) {
-            emit cameraError(id, QString("Cannot open local camera #%1").arg(camIndex));
-            delete stream;
-            return false;
-        }
-    }
-    else { // IP / RTSP камера
-        if (!stream->cap.open(source.toStdString())) {
-            emit cameraError(id, QString("Cannot open IP camera: %1").arg(source));
-            delete stream;
-            return false;
-        }
+    auto stream = std::make_shared<CameraStream>();
+    stream->source = source.trimmed();
+    stream->resolvedSource = normalizeSource(stream->source);
+    if (stream->resolvedSource.isEmpty()) {
+        qWarning() << "Invalid camera source" << source;
+        emit cameraError(id, tr("Invalid camera source: %1").arg(source));
+        return false;
     }
 
-    cameras[id] = stream;
+    stream->decoder = std::make_unique<FFVideoDecoder>(id);
+    connect(stream->decoder.get(), &FFVideoDecoder::frameReady, this,
+        [this, id](int, const QImage& frame) {
+            emit frameReady(id, prepareFrame(frame));
+        },
+        Qt::QueuedConnection);
+    connect(stream->decoder.get(), &FFVideoDecoder::errorOccurred, this,
+        [this, id](int, const QString& message) {
+            emit cameraError(id, message);
+        },
+        Qt::QueuedConnection);
+
+    cameras.insert(id, stream);
     return true;
 }
 
 void CameraManager::startCapture(int id)
 {
-    QMutexLocker locker(&mutex);
-    auto* stream = cameras.value(id, nullptr);
-    if (!stream || stream->active) return;
+    std::shared_ptr<CameraStream> stream;
+    QString source;
+    {
+        QMutexLocker locker(&mutex);
+        auto it = cameras.find(id);
+        if (it == cameras.end())
+            return;
+        stream = it.value();
+        if (!stream || stream->capturing.load())
+            return;
+        stream->capturing.store(true);
+        source = stream->resolvedSource;
+    }
 
-    stream->active = true;
-    QtConcurrent::run([this, id]() { captureLoop(id); });
+    if (stream && stream->decoder)
+        stream->decoder->start(source);
 }
 
 void CameraManager::stopCapture(int id)
 {
-    QMutexLocker locker(&mutex);
-    auto* stream = cameras.value(id, nullptr);
-    if (!stream) return;
+    std::shared_ptr<CameraStream> stream;
+    {
+        QMutexLocker locker(&mutex);
+        auto it = cameras.find(id);
+        if (it == cameras.end())
+            return;
+        stream = it.value();
+        if (!stream)
+            return;
+        stream->capturing.store(false);
+    }
 
-    stream->active = false;
+    if (stream && stream->decoder)
+        stream->decoder->stop();
+    if (stream && stream->audioPlayer)
+        stream->audioPlayer->stop();
 }
 
 void CameraManager::closeCamera(int id)
 {
-    QMutexLocker locker(&mutex);
-    auto* stream = cameras.value(id, nullptr);
-    if (!stream) return;
+    std::shared_ptr<CameraStream> stream;
+    {
+        QMutexLocker locker(&mutex);
+        auto it = cameras.find(id);
+        if (it == cameras.end())
+            return;
+        stream = it.value();
+        cameras.erase(it);
+    }
 
-    stream->active = false;
-    QThread::msleep(50); // невелика пауза для завершення потоку
+    if (!stream)
+        return;
 
-    if (stream->cap.isOpened())
-        stream->cap.release();
-
-    delete stream;
-    cameras.remove(id);
+    stream->capturing.store(false);
+    if (stream->decoder)
+        stream->decoder->stop();
+    if (stream->audioPlayer)
+        stream->audioPlayer->stop();
 }
 
 void CameraManager::closeAll()
 {
-    QMutexLocker locker(&mutex);
-    const auto keys = cameras.keys();
-    for (int id : keys)
+    QList<int> ids;
+    {
+        QMutexLocker locker(&mutex);
+        ids = cameras.keys();
+    }
+
+    for (int id : ids)
         closeCamera(id);
-    cameras.clear();
 }
 
 bool CameraManager::isCameraOpen(int id) const
@@ -111,78 +146,71 @@ bool CameraManager::isCameraOpen(int id) const
     return cameras.contains(id);
 }
 
-void CameraManager::captureLoop(int id)
-{
-    cv::Mat frame;
-    cv::Mat scaled;
-
-    while (true) {
-        {
-            QMutexLocker locker(&mutex);
-            if (!cameras.contains(id)) return;
-            if (!cameras[id]->active) return;
-        }
-
-        auto* stream = cameras.value(id, nullptr);
-        if (!stream) break;
-
-        stream->cap >> frame;
-        if (frame.empty()) continue;
-
-        const int targetHeight = 720;
-        if (frame.rows > targetHeight) {
-            const double scale = static_cast<double>(targetHeight) / static_cast<double>(frame.rows);
-            const int targetWidth = static_cast<int>(frame.cols * scale);
-            cv::resize(frame, scaled, cv::Size(targetWidth, targetHeight), 0, 0, cv::INTER_AREA);
-        } else {
-            scaled = frame;
-        }
-
-        QImage img = matToQImage(scaled);
-        emit frameReady(id, img);
-
-        QThread::msleep(33); // ~30 FPS
-    }
-}
-
-QImage CameraManager::matToQImage(const cv::Mat& mat)
-{
-    if (mat.empty()) return {};
-    if (mat.type() == CV_8UC3) {
-        return QImage(mat.data, mat.cols, mat.rows, mat.step, QImage::Format_BGR888).copy();
-    }
-    else if (mat.type() == CV_8UC1) {
-        return QImage(mat.data, mat.cols, mat.rows, mat.step, QImage::Format_Grayscale8).copy();
-    }
-    else if (mat.type() == CV_8UC4) {
-        return QImage(mat.data, mat.cols, mat.rows, mat.step, QImage::Format_ARGB32).copy();
-    }
-    return {};
-}
-
 void CameraManager::enableAudio(int id)
 {
-    QMutexLocker locker(&mutex);
-    auto* stream = cameras.value(id, nullptr);
-    if (!stream) return;
+    AudioStreamPlayer* player = nullptr;
+    std::shared_ptr<CameraStream> stream;
+    {
+        QMutexLocker locker(&mutex);
+        auto it = cameras.find(id);
+        if (it == cameras.end())
+            return;
+        stream = it.value();
+        if (!stream)
+            return;
+        if (stream->resolvedSource.startsWith(QStringLiteral("local://"), Qt::CaseInsensitive)) {
+            qWarning() << "Audio is not supported for local camera" << id;
+            return;
+        }
+        if (!stream->audioPlayer)
+            stream->audioPlayer = std::make_unique<AudioStreamPlayer>(stream->source);
+        player = stream->audioPlayer.get();
+    }
 
-    if (stream->audioPlayer) return;
-
-    stream->audioPlayer = new AudioStreamPlayer(stream->source);
-    stream->audioPlayer->start();
-
-    qDebug() << "🎧 Audio enabled for camera" << id;
+    if (player && !player->isRunning())
+        player->start();
 }
 
 void CameraManager::disableAudio(int id)
 {
-    QMutexLocker locker(&mutex);
-    auto* stream = cameras.value(id, nullptr);
-    if (!stream || !stream->audioPlayer) return;
+    AudioStreamPlayer* player = nullptr;
+    std::shared_ptr<CameraStream> stream;
+    {
+        QMutexLocker locker(&mutex);
+        auto it = cameras.find(id);
+        if (it == cameras.end())
+            return;
+        stream = it.value();
+        if (!stream || !stream->audioPlayer)
+            return;
+        player = stream->audioPlayer.get();
+    }
 
-    stream->audioPlayer->stop();
-    delete stream->audioPlayer;
-    stream->audioPlayer = nullptr;
+    if (player)
+        player->stop();
+}
 
-    qDebug() << "🔇 Audio disabled for camera" << id;
+QString CameraManager::normalizeSource(const QString& source) const
+{
+    const QString trimmed = source.trimmed();
+    if (trimmed.isEmpty())
+        return {};
+    if (trimmed.startsWith(QStringLiteral("local://"), Qt::CaseInsensitive))
+        return trimmed;
+
+    bool ok = false;
+    const int index = trimmed.toInt(&ok);
+    if (ok)
+        return QStringLiteral("local://%1").arg(index);
+    return trimmed;
+}
+
+QImage CameraManager::prepareFrame(const QImage& source) const
+{
+    if (source.isNull())
+        return {};
+
+    if (source.height() <= kMaxDisplayHeight)
+        return source;
+    return source.scaledToHeight(kMaxDisplayHeight, Qt::SmoothTransformation);
 }

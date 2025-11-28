@@ -5,11 +5,8 @@
 #include <QScrollArea>
 #include <QLabel>
 #include <QDebug>
-#include <QPainter>
-#include <QPen>
 #include <QMutexLocker>
 #include <QSize>
-#include <opencv2/imgproc.hpp>
 
 CamerasPage::CamerasPage(CameraManager* manager, AIProcessor* processor, QWidget* parent)
     : QWidget(parent)
@@ -99,7 +96,10 @@ void CamerasPage::addCameraSource(const QString& source, const QString& title)
     connect(view, &CameraViewWidget::removeRequested, this, &CamerasPage::onRemoveCamera);
     cameraWidgets.insert(id, view);
     cameraOrder.append(id);
-    detectionStates.remove(id);
+    {
+        QMutexLocker locker(&detectionMutex);
+        cameraStates.remove(id);
+    }
     view->setCameraActive(true);
     view->setAudioVisible(true);
 
@@ -154,31 +154,21 @@ void CamerasPage::onFrameReady(int id, const QImage& frame)
     if (!view || frame.isNull())
         return;
 
-    QVector<Detection> cachedDetections;
-    QSize sourceSize = frame.size();
-    {
-        QMutexLocker locker(&detectionMutex);
-        auto& state = detectionStates[id];
-        if (state.sourceSize.isEmpty())
-            state.sourceSize = frame.size();
-        cachedDetections = state.detections;
-        sourceSize = state.sourceSize;
-    }
-
-    const QSize targetSize = view->size();
-    view->updateFrame(composeFrame(frame, cachedDetections, sourceSize, targetSize));
-
     bool shouldProcess = false;
+    bool allowRawDisplay = !aiProcessor;
     {
         QMutexLocker locker(&detectionMutex);
-        auto& state = detectionStates[id];
-        if (!state.pending && !aiBusy.load()) {
+        auto& state = cameraStates[id];
+        allowRawDisplay = allowRawDisplay || !state.hasAnnotated;
+        if (aiProcessor && !state.pending && !aiBusy.load()) {
             state.pending = true;
-            state.sourceSize = frame.size();
             shouldProcess = true;
             aiBusy.store(true);
         }
     }
+
+    if (allowRawDisplay)
+        view->updateFrame(frame);
 
     if (shouldProcess)
         emit requestProcessFrame(id, frame);
@@ -186,16 +176,20 @@ void CamerasPage::onFrameReady(int id, const QImage& frame)
 
 void CamerasPage::onFrameProcessed(int id, const QImage& annotated, const QVector<Detection>& detections, const QSize& sourceSize)
 {
-    Q_UNUSED(annotated);
+    Q_UNUSED(detections);
+    Q_UNUSED(sourceSize);
+
     {
         QMutexLocker locker(&detectionMutex);
-        auto& state = detectionStates[id];
-        state.detections = detections;
-        if (!sourceSize.isEmpty())
-            state.sourceSize = sourceSize;
+        auto& state = cameraStates[id];
         state.pending = false;
+        state.hasAnnotated = true;
     }
     aiBusy.store(false);
+
+    auto* view = cameraWidgets.value(id, nullptr);
+    if (view && !annotated.isNull())
+        view->updateFrame(annotated);
 }
 
 void CamerasPage::onToggleCamera(int id, bool enable)
@@ -220,7 +214,8 @@ void CamerasPage::onRemoveCamera(int id)
 
     if (auto* view = cameraWidgets.take(id)) {
         cameraOrder.removeAll(id);
-        detectionStates.remove(id);
+        QMutexLocker locker(&detectionMutex);
+        cameraStates.remove(id);
         view->deleteLater();
     }
     if (currentPage * camsPerPage >= cameraOrder.size() && currentPage > 0)
@@ -242,58 +237,4 @@ void CamerasPage::onPrevPage()
         --currentPage;
         updateGrid();
     }
-}
-
-cv::Mat CamerasPage::imageToMat(const QImage& image) const
-{
-    if (image.isNull())
-        return {};
-
-    QImage converted = image.convertToFormat(QImage::Format_RGB888);
-    cv::Mat mat(converted.height(), converted.width(), CV_8UC3,
-        const_cast<uchar*>(converted.bits()), converted.bytesPerLine());
-    cv::Mat bgr;
-    cv::cvtColor(mat, bgr, cv::COLOR_RGB2BGR);
-    return bgr;
-}
-
-QImage CamerasPage::matToImage(const cv::Mat& mat) const
-{
-    if (mat.empty())
-        return {};
-    cv::Mat rgb;
-    cv::cvtColor(mat, rgb, cv::COLOR_BGR2RGB);
-    return QImage(rgb.data, rgb.cols, rgb.rows, rgb.step, QImage::Format_RGB888).copy();
-}
-
-QImage CamerasPage::composeFrame(const QImage& frame, const QVector<Detection>& detections, const QSize& sourceSize, const QSize& targetSize) const
-{
-    if (frame.isNull())
-        return {};
-
-    const QSize desiredSize = targetSize.isEmpty() ? frame.size() : targetSize;
-    QImage scaled = frame.scaled(desiredSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-    if (detections.isEmpty() || sourceSize.isEmpty())
-        return scaled;
-
-    const double sx = sourceSize.width() > 0 ? static_cast<double>(scaled.width()) / sourceSize.width() : 1.0;
-    const double sy = sourceSize.height() > 0 ? static_cast<double>(scaled.height()) / sourceSize.height() : 1.0;
-
-    QPainter painter(&scaled);
-    painter.setRenderHint(QPainter::Antialiasing);
-    for (const auto& detection : detections) {
-        QRectF rect(detection.rect.x() * sx,
-            detection.rect.y() * sy,
-            detection.rect.width() * sx,
-            detection.rect.height() * sy);
-        painter.setPen(QPen(detection.color, 2));
-        painter.drawRect(rect);
-        const QString label = detection.label.isEmpty() ? detection.category : detection.label;
-        if (!label.isEmpty()) {
-            painter.setPen(Qt::white);
-            painter.drawText(rect.topLeft() + QPointF(0, -4), label);
-        }
-    }
-    return scaled;
 }

@@ -20,6 +20,32 @@ inline AVPixelFormat toPixelFormat(AVPixelFormat fmt)
         return AV_PIX_FMT_YUV420P;
     return fmt;
 }
+
+cv::VideoCapture openLocalDevice(int index)
+{
+    struct BackendAttempt {
+        int api;
+        const char* description;
+    };
+
+    const BackendAttempt attempts[] = {
+#ifdef _WIN32
+        { cv::CAP_DSHOW, "DirectShow" },
+        { cv::CAP_MSMF, "MediaFoundation" },
+#endif
+        { cv::CAP_ANY, "Auto" },
+    };
+
+    for (const auto& attempt : attempts) {
+        cv::VideoCapture capture;
+        const bool opened = (attempt.api == cv::CAP_ANY)
+            ? capture.open(index)
+            : capture.open(index, attempt.api);
+        if (opened && capture.isOpened())
+            return capture;
+    }
+    return {};
+}
 } // namespace
 
 FFVideoDecoder::FFVideoDecoder(int cameraId, QObject* parent)
@@ -225,8 +251,7 @@ void FFVideoDecoder::decodingLoopLocal(const QString& url)
     const int index = ok ? deviceIndex : 0;
 
     while (running) {
-        // Avoid MSMF GPU HW path; prefer DirectShow first, then MSMF/FFmpeg fallback inside OpenCV.
-        cv::VideoCapture capture(index, cv::CAP_DSHOW);
+        cv::VideoCapture capture = openLocalDevice(index);
         if (!capture.isOpened()) {
             emit errorOccurred(cameraId, tr("Unable to open local camera %1").arg(index));
             QThread::msleep(reconnectDelayMs);
