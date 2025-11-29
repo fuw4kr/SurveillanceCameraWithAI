@@ -162,7 +162,8 @@ void SupabaseClient::postEvent(const EventPayload& event)
         emit eventPostFailed(event, QStringLiteral("Not authenticated"));
         return;
     }
-    qInfo().noquote() << "[Supabase] Posting event" << event.eventType << "camera:" << event.cameraLabel << "confidence:" << event.confidence;
+    const QString cameraRef = event.cameraId.isEmpty() ? event.cameraLabel : event.cameraId;
+    qInfo().noquote() << "[Supabase] Posting event" << event.eventType << "camera:" << cameraRef << "confidence:" << event.confidence;
     QNetworkRequest req = authorizedRequest(QStringLiteral("/api/events"));
     QJsonObject payload;
     const QString eventType = event.eventType.isEmpty()
@@ -171,12 +172,14 @@ void SupabaseClient::postEvent(const EventPayload& event)
     payload.insert(QStringLiteral("event_type"), eventType);
     if (!event.personId.isEmpty())
         payload.insert(QStringLiteral("person_id"), event.personId);
+    if (!event.cameraId.isEmpty())
+        payload.insert(QStringLiteral("camera_id"), event.cameraId);
     if (event.confidence > 0.0f)
         payload.insert(QStringLiteral("confidence"), event.confidence);
     if (!event.timestamp.isNull())
         payload.insert(QStringLiteral("timestamp"), event.timestamp.toUTC().toString(Qt::ISODateWithMs));
-    if (!event.cameraLabel.isEmpty())
-        payload.insert(QStringLiteral("snapshot_url"), event.cameraLabel);
+    if (!event.snapshotUrl.isEmpty())
+        payload.insert(QStringLiteral("snapshot_url"), event.snapshotUrl);
 
     QNetworkReply* reply = network.post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, this, [this, reply, event]() {

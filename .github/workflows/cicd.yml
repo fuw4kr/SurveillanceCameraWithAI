@@ -79,11 +79,13 @@ jobs:
           echo "KEY=${{ runner.os }}-vcpkg-$($hash.Hash)" >> $env:GITHUB_OUTPUT
 
       - name: Cache vcpkg archives
+        id: cache-vcpkg
         uses: actions/cache@v4
-        id: cache
         with:
           path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
           key: ${{ steps.cache-key.outputs.KEY }}
+          restore-keys: |
+             Windows-vcpkg-9D662B1FB17BA73F3E982944A71A754A1ADE1EB0BF99655EE23B8EE5725A3643
 
       - name: Install Dependencies (vcpkg)
         if: steps.cache.outputs.cache-hit != 'true' 

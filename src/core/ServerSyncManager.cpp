@@ -1,4 +1,5 @@
 #include "ServerSyncManager.h"
+#include "CameraManager.h"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -147,10 +148,12 @@ void ServerSyncManager::sendDetectionStatus(const QString& personId, int cameraI
     EventPayload payload;
     payload.eventType = active ? QStringLiteral("face_detected") : QStringLiteral("face_lost");
     payload.personId = personId;
-    payload.cameraLabel = QStringLiteral("Camera %1").arg(cameraId);
+    const QString source = cameraSourceForLocal(cameraId);
+    payload.cameraLabel = source.isEmpty() ? QStringLiteral("Camera %1").arg(cameraId) : source;
+    payload.cameraId = cameraIdForStream(source);
     payload.timestamp = timestamp.isValid() ? timestamp : QDateTime::currentDateTimeUtc();
     client->postEvent(payload);
-    qInfo() << "[ServerSync]" << payload.eventType << "reported for person" << personId << "camera" << cameraId;
+    qInfo() << "[ServerSync]" << payload.eventType << "reported for person" << personId << "camera" << (payload.cameraId.isEmpty() ? QString::number(cameraId) : payload.cameraId);
 }
 
 void ServerSyncManager::renamePerson(const QString& personId, const QString& newName)
@@ -287,6 +290,11 @@ void ServerSyncManager::setAiProcessor(AIProcessor* processor)
     if (aiProcessor)
         disconnect(aiProcessor, nullptr, this, nullptr);
     aiProcessor = processor;
+}
+
+void ServerSyncManager::setCameraManager(CameraManager* manager)
+{
+    cameraManager = manager;
 }
 
 void ServerSyncManager::start()
@@ -578,6 +586,31 @@ void ServerSyncManager::handleCameraUpdateFailed(const QString& error)
     emit cameraUpdateFailed(error);
 }
 
+QString ServerSyncManager::cameraSourceForLocal(int cameraId) const
+{
+    if (!cameraManager)
+        return {};
+    return cameraManager->cameraSource(cameraId);
+}
+
+QString ServerSyncManager::cameraIdForStream(const QString& streamUrl) const
+{
+    const QString normalized = streamUrl.trimmed().toLower();
+    if (normalized.isEmpty())
+        return {};
+    for (const auto& record : camerasCache) {
+        if (record.streamUrl.trimmed().toLower() == normalized)
+            return record.id;
+    }
+    return {};
+}
+
+QString ServerSyncManager::cameraIdForLocal(int cameraId) const
+{
+    const QString source = cameraSourceForLocal(cameraId);
+    return cameraIdForStream(source);
+}
+
 void ServerSyncManager::enqueueDetections(int cameraId, const QVector<Detection>& detections)
 {
     if (detections.isEmpty())
@@ -591,7 +624,9 @@ void ServerSyncManager::enqueueDetections(int cameraId, const QVector<Detection>
         payload.detectionLabel = detection.label;
         payload.category = detection.category;
         payload.confidence = detection.confidence;
-        payload.cameraLabel = cameraId >= 0 ? QString::number(cameraId) : QString();
+        const QString source = cameraSourceForLocal(cameraId);
+        payload.cameraLabel = source.isEmpty() ? (cameraId >= 0 ? QString::number(cameraId) : QString()) : source;
+        payload.cameraId = cameraIdForStream(source);
         payload.timestamp = now;
         eventQueue.enqueue({ payload, 0 });
         if (eventQueue.size() > maxEventQueueSize)

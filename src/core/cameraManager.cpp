@@ -150,6 +150,16 @@ bool CameraManager::isCameraOpen(int id) const
     return cameras.contains(id);
 }
 
+QString CameraManager::cameraSource(int id) const
+{
+    QMutexLocker locker(&mutex);
+    auto it = cameras.find(id);
+    if (it == cameras.end())
+        return {};
+    const auto stream = it.value();
+    return stream ? stream->source : QString();
+}
+
 void CameraManager::enableAudio(int id)
 {
     AudioStreamPlayer* player = nullptr;
