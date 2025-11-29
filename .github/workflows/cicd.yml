@@ -108,6 +108,9 @@ jobs:
           Write-Host "  Package artifacts.... $env:PACKAGE_ARTIFACTS"
           Write-Host "  Force release........ $env:FORCE_PUBLISH_RELEASE"
 
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure CMake
         run: >
           cmake -B "${{ env.BUILD_DIR }}" -S .

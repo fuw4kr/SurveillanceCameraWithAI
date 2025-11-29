@@ -193,17 +193,52 @@ void SupabaseClient::postEvents(const QList<EventPayload>& events)
         postEvent(ev);
 }
 
-void SupabaseClient::postAlert(const QString& alertType, const QString& message, const QString& severity)
+void SupabaseClient::postAlert(const QString& alertType, const QString& message, const QString& severity, const QImage& snapshot)
 {
     if (!isAuthenticated()) {
         emit alertPostFailed(QStringLiteral("Not authenticated"));
         return;
     }
+    const QString resolvedSeverity = severity.isEmpty() ? QStringLiteral("medium") : severity;
+    if (!snapshot.isNull()) {
+        QByteArray imageBytes;
+        QBuffer buffer(&imageBytes);
+        buffer.open(QIODevice::WriteOnly);
+        snapshot.save(&buffer, "PNG");
+
+        QHttpMultiPart* multipart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+        auto appendField = [&](const QString& name, const QString& value) {
+            QHttpPart part;
+            part.setHeader(QNetworkRequest::ContentDispositionHeader,
+                QVariant(QStringLiteral("form-data; name=\"%1\"").arg(name)));
+            part.setBody(value.toUtf8());
+            multipart->append(part);
+        };
+        appendField(QStringLiteral("alert_type"), alertType);
+        appendField(QStringLiteral("message"), message);
+        appendField(QStringLiteral("severity"), resolvedSeverity);
+
+        QHttpPart imagePart;
+        imagePart.setHeader(QNetworkRequest::ContentDispositionHeader,
+            QVariant(QStringLiteral("form-data; name=\"snapshot\"; filename=\"snapshot.png\"")));
+        imagePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("image/png")));
+        imagePart.setBody(imageBytes);
+        multipart->append(imagePart);
+
+        QNetworkRequest req = authorizedRequest(QStringLiteral("/api/alerts"), false);
+        QNetworkReply* reply = network.post(req, multipart);
+        multipart->setParent(reply);
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            handleAlertReply(reply);
+        });
+        return;
+    }
+
     QNetworkRequest req = authorizedRequest(QStringLiteral("/api/alerts"));
     QJsonObject payload;
     payload.insert(QStringLiteral("alert_type"), alertType);
     payload.insert(QStringLiteral("message"), message);
-    payload.insert(QStringLiteral("severity"), severity.isEmpty() ? QStringLiteral("medium") : severity);
+    payload.insert(QStringLiteral("severity"), resolvedSeverity);
     QNetworkReply* reply = network.post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         handleAlertReply(reply);
