@@ -1,8 +1,11 @@
 name: Generate and Deploy Docs
+
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
+      - docs
       - feature/docs-ci
 
 permissions:
@@ -14,32 +17,44 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Doxygen
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y doxygen graphviz
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
 
-      - name: Prepare output directory
-        run: mkdir -p docs
-
-      - name: Generate documentation
+      - name: Generate Doxygen documentation
         run: doxygen Doxyfile
 
-      - name: Create .nojekyll to fix styles
-        run: touch docs/html/.nojekyll
+      - name: Verify generated files
+        run: |
+          echo "Generated files:"
+          ls -R docs/html || echo " No docs/html folder found!"
 
-      - name: Upload HTML artifact
+      - name: Upload generated docs
         uses: actions/upload-artifact@v4
         with:
-          name: doxygen-html
+          name: doxygen-docs
           path: docs/html
-          if-no-files-found: error
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/feature/docs-ci'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download generated docs
+        uses: actions/download-artifact@v4
+        with:
+          name: doxygen-docs
+          path: docs/html
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
           publish_dir: ./docs/html
+          force_orphan: true
