@@ -71,6 +71,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Create vcpkg cache key
         id: cache-key
         shell: pwsh
@@ -107,9 +110,6 @@ jobs:
           Write-Host "  Run tests............ $env:RUN_TESTS"
           Write-Host "  Package artifacts.... $env:PACKAGE_ARTIFACTS"
           Write-Host "  Force release........ $env:FORCE_PUBLISH_RELEASE"
-
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure CMake
         run: >
