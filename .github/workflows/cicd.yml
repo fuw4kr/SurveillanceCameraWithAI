@@ -1,4 +1,4 @@
-name: Build Dependencies Only
+name: CI/CD
 
 on:
   push:
