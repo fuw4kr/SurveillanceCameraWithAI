@@ -20,6 +20,7 @@
 #include <QWidget>
 #include <QMainWindow>
 #include <QListWidget>
+#include <QListView>
 #include <QStackedWidget>
 #include <QPushButton>
 #include <QLabel>
@@ -84,6 +85,7 @@ private:
     QListWidget* listModes;
     QStackedWidget* stackedWidget;
     SnapPreviewWindow* snapPreview;
+    QListView* consoleView = nullptr;
     DashboardPage* dashboardPage = nullptr;
 
     QWidget* settingsPopup = nullptr;
@@ -128,6 +130,7 @@ private:
     void setupSettingsPopup();
     void refreshSettingsUi();
     void setupSidebar();
+    void setupConsole();
     void setupConnections();
     bool loadDetectionModel(const QString& modelPath, const QString& configPath, bool warnOnFailure = true);
     bool loadEmbeddingModel(const QString& modelPath, bool warnOnFailure = true);

@@ -145,6 +145,20 @@ void ServerSyncManager::renamePerson(const QString& personId, const QString& new
     emit statusMessage(tr("Updating \"%1\"...").arg(newName));
 }
 
+void ServerSyncManager::updatePersonRole(const QString& personId, const QString& newRole)
+{
+    if (personId.isEmpty()) {
+        emit errorMessage(tr("Select a person to edit role."));
+        return;
+    }
+    if (!client->isAuthenticated() && !ensureAuthenticated())
+        return;
+    QJsonObject fields;
+    fields.insert(QStringLiteral("role"), newRole.trimmed());
+    client->updatePerson(personId, fields);
+    emit statusMessage(newRole.trimmed().isEmpty() ? tr("Clearing role...") : tr("Updating role to \"%1\"...").arg(newRole.trimmed()));
+}
+
 void ServerSyncManager::deletePerson(const QString& personId)
 {
     if (personId.isEmpty()) {

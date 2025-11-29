@@ -65,7 +65,6 @@ void AnalyticsPage::buildUi()
 
     auto* header = new QHBoxLayout;
     auto* title = new QLabel(tr("AI Analytics & BI Dashboard"));
-    title->setStyleSheet("font-size:20px; font-weight:600;");
 
     cameraCombo = new QComboBox;
     cameraCombo->setMinimumWidth(220);
@@ -83,16 +82,7 @@ void AnalyticsPage::buildUi()
         card->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         card->setMinimumHeight(90);
         card->setWordWrap(true);
-        card->setStyleSheet(R"(
-            QLabel {
-                background:#0f172a;
-                border:1px solid #1e293b;
-                border-radius:12px;
-                padding:12px;
-                color:#e2e8f0;
-                font-size:13px;
-            }
-        )");
+
         card->setText(QStringLiteral("<b>%1</b><br><span style='color:#94a3b8;'>—</span>").arg(titleText));
         return card;
     };
@@ -155,7 +145,6 @@ void AnalyticsPage::buildUi()
     layout->addLayout(chartsLayout);
 
     auto* tableHeader = new QLabel(tr("Облік робочого часу"));
-    tableHeader->setStyleSheet("font-weight:600; font-size:16px;");
     layout->addWidget(tableHeader);
 
     attendanceTable = new QTableWidget;
@@ -166,43 +155,21 @@ void AnalyticsPage::buildUi()
     attendanceTable->verticalHeader()->setVisible(false);
     attendanceTable->setEditTriggers(QTableWidget::NoEditTriggers);
     attendanceTable->setSelectionMode(QTableWidget::NoSelection);
-    attendanceTable->setStyleSheet(R"(
-        QTableWidget {
-            background:#020617;
-            border:1px solid #1e293b;
-            border-radius:10px;
-            color:#e2e8f0;
-        }
-        QHeaderView::section {
-            background:#0f172a;
-            color:#cbd5f5;
-            border:none;
-            padding:6px;
-        }
-    )");
+    
     layout->addWidget(attendanceTable);
 
     statsLabel = new QLabel(tr("Немає даних"));
-    statsLabel->setStyleSheet("color:#e5e7eb; font-weight:500;");
     layout->addWidget(statsLabel);
 
     previewLabel = new QLabel;
     previewLabel->setMinimumSize(kPreviewSize);
     previewLabel->setAlignment(Qt::AlignCenter);
-    previewLabel->setStyleSheet("background:#050505; border:1px solid #1f2937; border-radius:8px;");
     previewLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     detectionList = new QListWidget;
     detectionList->setMinimumWidth(260);
     detectionList->setIconSize(QSize(64, 64));
-    detectionList->setStyleSheet(R"(
-        QListWidget {
-            background:#111827;
-            border:1px solid #1f2937;
-            border-radius:6px;
-            color:#e5e7eb;
-        }
-    )");
+
 
     auto* liveLayout = new QHBoxLayout;
     liveLayout->setSpacing(12);

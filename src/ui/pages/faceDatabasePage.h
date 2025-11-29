@@ -7,6 +7,9 @@
 #include <QStringList>
 #include <QVector>
 #include <QWidget>
+#include <QHash>
+#include <QSet>
+#include <QNetworkAccessManager>
 
 class QListWidget;
 class QListWidgetItem;
@@ -33,6 +36,8 @@ private slots:
     void handleRename();
     void handleDelete();
     void handleNameEdited(const QString& text);
+    void handleRoleEdited(const QString& text);
+    void handleRoleUpdate();
     void handleRefreshClicked();
 
 private:
@@ -44,21 +49,29 @@ private:
     QLabel* infoLabel = nullptr;
     QLabel* statusLabel = nullptr;
     QLineEdit* nameEdit = nullptr;
+    QLineEdit* roleEdit = nullptr;
     QPushButton* renameButton = nullptr;
+    QPushButton* roleButton = nullptr;
     QPushButton* deleteButton = nullptr;
     QPushButton* refreshButton = nullptr;
 
     QList<PersonRecord> remotePersons;
     QString currentFilter;
     bool updatingSelection = false;
+    QNetworkAccessManager* imageLoader = nullptr;
+    QHash<QString, QPixmap> avatarCache;
+    QSet<QString> pendingImages;
 
     void rebuildGallery();
     QStringList selectedIds() const;
     QString selectedPrimaryId() const;
     PersonRecord personById(const QString& id) const;
     void updateDetailPanel();
-    QPixmap buildFacePixmap(const PersonRecord& person, const QSize& size) const;
+    QPixmap buildFacePixmap(const PersonRecord& person, const QSize& size);
     void setStatusMessage(const QString& text, bool isError = false);
+    QString resolveImageKey(const QString& imageUrl) const;
+    void ensureAvatarFetched(const PersonRecord& person);
+    void refreshGalleryIcons(const QString& imageKey);
 };
 
 #endif // FACEDATABASEPAGE_H

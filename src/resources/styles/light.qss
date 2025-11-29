@@ -104,7 +104,6 @@ QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDate
 
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QDateTimeEdit:focus {
     border-color: #3b82f6;
-    box-shadow: 0 0 0 1px #3b82f6;
 }
 
 QComboBox::drop-down {

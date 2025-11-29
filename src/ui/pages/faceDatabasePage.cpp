@@ -14,6 +14,9 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QUrl>
 #include <algorithm>
 
 namespace {
@@ -25,6 +28,8 @@ FaceDatabasePage::FaceDatabasePage(ServerSyncManager* sync, QWidget* parent)
     : QWidget(parent)
     , serverSync(sync)
 {
+    imageLoader = new QNetworkAccessManager(this);
+
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(16, 16, 16, 16);
     mainLayout->setSpacing(12);
@@ -100,11 +105,18 @@ FaceDatabasePage::FaceDatabasePage(ServerSyncManager* sync, QWidget* parent)
     nameEdit->setPlaceholderText(tr("Display name (e.g. Ivan Director)"));
     detailLayout->addWidget(nameEdit);
 
+    roleEdit = new QLineEdit(detailPanel);
+    roleEdit->setPlaceholderText(tr("Role (e.g. Guard, Employee)"));
+    roleEdit->setEnabled(false);
+    detailLayout->addWidget(roleEdit);
+
     QHBoxLayout* actionRow = new QHBoxLayout;
     actionRow->setSpacing(8);
     renameButton = new QPushButton(tr("Rename"), detailPanel);
+    roleButton = new QPushButton(tr("Update role"), detailPanel);
     deleteButton = new QPushButton(tr("Delete"), detailPanel);
     actionRow->addWidget(renameButton);
+    actionRow->addWidget(roleButton);
     actionRow->addWidget(deleteButton);
     detailLayout->addLayout(actionRow);
 
@@ -120,10 +132,13 @@ FaceDatabasePage::FaceDatabasePage(ServerSyncManager* sync, QWidget* parent)
     connect(searchInput, &QLineEdit::textChanged, this, &FaceDatabasePage::handleSearchChanged);
     connect(gallery, &QListWidget::itemSelectionChanged, this, &FaceDatabasePage::handleSelectionChanged);
     connect(renameButton, &QPushButton::clicked, this, &FaceDatabasePage::handleRename);
+    connect(roleButton, &QPushButton::clicked, this, &FaceDatabasePage::handleRoleUpdate);
     connect(deleteButton, &QPushButton::clicked, this, &FaceDatabasePage::handleDelete);
     connect(nameEdit, &QLineEdit::textChanged, this, &FaceDatabasePage::handleNameEdited);
+    connect(roleEdit, &QLineEdit::textChanged, this, &FaceDatabasePage::handleRoleEdited);
 
     renameButton->setEnabled(false);
+    roleButton->setEnabled(false);
     deleteButton->setEnabled(false);
     setStatusMessage(QString());
 }
@@ -131,6 +146,8 @@ FaceDatabasePage::FaceDatabasePage(ServerSyncManager* sync, QWidget* parent)
 void FaceDatabasePage::setRemotePersons(const QList<PersonRecord>& persons)
 {
     remotePersons = persons;
+    for (const auto& person : remotePersons)
+        ensureAvatarFetched(person);
     rebuildGallery();
     if (infoLabel)
         infoLabel->setText(tr("Server profiles: %1").arg(remotePersons.size()));
@@ -159,12 +176,14 @@ void FaceDatabasePage::rebuildGallery()
         auto* item = new QListWidgetItem;
         item->setData(Qt::UserRole, person.id);
         const QString display = person.name.isEmpty() ? tr("Unnamed") : person.name;
-        item->setText(display);
+        const QString text = tr("%1\nID: %2").arg(display, person.id);
+        item->setText(text);
         item->setToolTip(tr("%1 (%2)").arg(display, person.role.isEmpty() ? tr("No role") : person.role));
         item->setIcon(QIcon(buildFacePixmap(person, kCardIconSize)));
         gallery->addItem(item);
         if (previousSelection.contains(person.id))
             item->setSelected(true);
+        ensureAvatarFetched(person);
     }
 
     updatingSelection = false;
@@ -209,9 +228,18 @@ void FaceDatabasePage::updateDetailPanel()
     const QStringList ids = selectedIds();
     const bool single = ids.size() == 1;
     const bool hasSelection = !ids.isEmpty();
+    const PersonRecord person = single ? personById(ids.first()) : PersonRecord();
 
     if (!single) {
-        QSignalBlocker blocker(nameEdit);
+        {
+            QSignalBlocker blocker(nameEdit);
+            nameEdit->clear();
+        }
+        if (roleEdit) {
+            QSignalBlocker blockRole(roleEdit);
+            roleEdit->clear();
+            roleEdit->setEnabled(false);
+        }
         if (hasSelection) {
             previewLabel->setPixmap(QPixmap());
             previewLabel->setText(tr("%1 people selected").arg(ids.size()));
@@ -221,33 +249,59 @@ void FaceDatabasePage::updateDetailPanel()
             previewLabel->setText(tr("Select a person"));
             samplesLabel->setText(tr("No selection"));
         }
-        nameEdit->clear();
     } else {
-        const auto person = personById(ids.first());
+
         QPixmap pix = buildFacePixmap(person, kDetailPreviewSize);
         previewLabel->setPixmap(pix);
         previewLabel->setText(QString());
-        QString meta = tr("Role: %1").arg(person.role.isEmpty() ? tr("Unknown") : person.role);
-        meta += tr(" • Access: %1").arg(person.authorized ? tr("Allowed") : tr("Restricted"));
+        QString meta = tr("ID: %1").arg(person.id);
+        meta += tr("\nRole: %1").arg(person.role.isEmpty() ? tr("Unknown") : person.role);
+        meta += tr(" | Access: %1").arg(person.authorized ? tr("Allowed") : tr("Restricted"));
         if (person.lastSeen.isValid())
             meta += tr("\nLast seen: %1").arg(person.lastSeen.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
         samplesLabel->setText(meta);
         const QSignalBlocker blocker(nameEdit);
         nameEdit->setText(person.name);
+        if (roleEdit) {
+            QSignalBlocker blockRole(roleEdit);
+            roleEdit->setEnabled(true);
+            roleEdit->setText(person.role);
+        }
     }
 
     renameButton->setEnabled(single && !nameEdit->text().trimmed().isEmpty());
     deleteButton->setEnabled(hasSelection);
+    if (roleButton) {
+        const QString trimmedRole = roleEdit ? roleEdit->text().trimmed() : QString();
+        roleButton->setEnabled(single && roleEdit && trimmedRole != person.role);
+    }
 }
 
-QPixmap FaceDatabasePage::buildFacePixmap(const PersonRecord& person, const QSize& size) const
+QPixmap FaceDatabasePage::buildFacePixmap(const PersonRecord& person, const QSize& size)
 {
     QPixmap pixmap(size);
     pixmap.fill(Qt::transparent);
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    const QRect rect = pixmap.rect();
+    QRect rect = pixmap.rect();
+    const QString key = resolveImageKey(person.imageUrl);
+    if (!key.isEmpty() && avatarCache.contains(key)) {
+        QPixmap avatar = avatarCache.value(key);
+        if (!avatar.isNull()) {
+            QPixmap scaled = avatar.scaled(size, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+            QRect target = rect.adjusted(4, 4, -4, -4);
+            QPainterPath path;
+            path.addRoundedRect(target, 12, 12);
+            painter.setClipPath(path);
+            painter.drawPixmap(target.topLeft(), scaled, QRect(QPoint(0, 0), target.size()));
+            painter.setClipPath(QPainterPath());
+            painter.setPen(QPen(QColor("#0f172a"), 2));
+            painter.drawRoundedRect(target, 12, 12);
+            return pixmap;
+        }
+    }
+
     painter.setBrush(QColor("#1f2937"));
     painter.setPen(Qt::NoPen);
     painter.drawRoundedRect(rect, 12, 12);
@@ -262,6 +316,8 @@ QPixmap FaceDatabasePage::buildFacePixmap(const PersonRecord& person, const QSiz
         ? QStringLiteral("?")
         : person.name.left(1).toUpper();
     painter.drawText(rect, Qt::AlignCenter, initial);
+
+    ensureAvatarFetched(person);
     return pixmap;
 }
 
@@ -320,6 +376,34 @@ void FaceDatabasePage::handleNameEdited(const QString&)
     renameButton->setEnabled(single && !nameEdit->text().trimmed().isEmpty());
 }
 
+void FaceDatabasePage::handleRoleEdited(const QString&)
+{
+    if (!roleButton || !roleEdit)
+        return;
+    const QStringList ids = selectedIds();
+    const bool single = ids.size() == 1;
+    if (!single) {
+        roleButton->setEnabled(false);
+        return;
+    }
+    const PersonRecord person = personById(ids.first());
+    roleButton->setEnabled(roleEdit->text().trimmed() != person.role);
+}
+
+void FaceDatabasePage::handleRoleUpdate()
+{
+    if (!serverSync || !roleEdit)
+        return;
+    const QStringList ids = selectedIds();
+    if (ids.size() != 1)
+        return;
+    const QString personId = ids.first();
+    const QString newRole = roleEdit->text().trimmed();
+    serverSync->updatePersonRole(personId, newRole);
+    setStatusMessage(newRole.isEmpty() ? tr("Clearing role...") : tr("Updating role to \"%1\"...").arg(newRole));
+    roleButton->setEnabled(false);
+}
+
 void FaceDatabasePage::setStatusMessage(const QString& text, bool isError)
 {
     if (!statusLabel)
@@ -332,3 +416,72 @@ void FaceDatabasePage::setStatusMessage(const QString& text, bool isError)
                                        : QStringLiteral("color:#a7f3d0; font-size:12px;"));
     statusLabel->setText(text);
 }
+
+QString FaceDatabasePage::resolveImageKey(const QString& imageUrl) const
+{
+    if (imageUrl.isEmpty())
+        return {};
+    QUrl url(imageUrl);
+    if (!url.isValid() || url.scheme().isEmpty()) {
+        if (serverSync) {
+            const QUrl base = serverSync->baseUrl();
+            if (base.isValid())
+                url = base.resolved(QUrl(imageUrl));
+        }
+    }
+    return url.isValid() ? url.toString() : imageUrl;
+}
+
+void FaceDatabasePage::ensureAvatarFetched(const PersonRecord& person)
+{
+    if (!imageLoader)
+        return;
+    const QString key = resolveImageKey(person.imageUrl);
+    if (key.isEmpty() || avatarCache.contains(key) || pendingImages.contains(key))
+        return;
+    QUrl url(key);
+    if (!url.isValid())
+        return;
+    pendingImages.insert(key);
+    QNetworkReply* reply = imageLoader->get(QNetworkRequest(url));
+    reply->setProperty("avatarKey", key);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const QString key = reply->property("avatarKey").toString();
+        pendingImages.remove(key);
+        if (reply->error() != QNetworkReply::NoError) {
+            qWarning() << "[FaceDatabase]" << "Avatar download failed:" << key << reply->errorString();
+            reply->deleteLater();
+            return;
+        }
+        QPixmap pix;
+        pix.loadFromData(reply->readAll());
+        reply->deleteLater();
+        if (pix.isNull()) {
+            qWarning() << "[FaceDatabase]" << "Avatar data invalid for" << key;
+            return;
+        }
+        avatarCache.insert(key, pix);
+        refreshGalleryIcons(key);
+    });
+}
+
+void FaceDatabasePage::refreshGalleryIcons(const QString& imageKey)
+{
+    if (!gallery)
+        return;
+    for (int i = 0; i < gallery->count(); ++i) {
+        auto* item = gallery->item(i);
+        const QString id = item->data(Qt::UserRole).toString();
+        const PersonRecord person = personById(id);
+        if (resolveImageKey(person.imageUrl) == imageKey) {
+            item->setIcon(QIcon(buildFacePixmap(person, kCardIconSize)));
+        }
+    }
+    const QStringList ids = selectedIds();
+    if (!ids.isEmpty()) {
+        const PersonRecord person = personById(ids.first());
+        if (resolveImageKey(person.imageUrl) == imageKey)
+            updateDetailPanel();
+    }
+}
+

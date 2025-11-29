@@ -30,7 +30,7 @@ public:
 
 private:
     void rebuildPoints(const QVector<QVector3D>& points);
-    void resetCamera(const QVector<QVector3D>& points);
+    void resetCamera();
     void createAxes();
     void clearPointEntities();
 
@@ -42,6 +42,7 @@ private:
     Qt3DRender::QCamera* camera = nullptr;
     Qt3DExtras::QOrbitCameraController* orbitController = nullptr;
     QVector<Qt3DCore::QEntity*> pointEntities;
+    QVector<QVector3D> normalizedPoints;
 };
 
 #endif // FACEMESHVIEW_H
