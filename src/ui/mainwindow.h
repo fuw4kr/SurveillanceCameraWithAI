@@ -23,7 +23,6 @@
 #include <QStackedWidget>
 #include <QPushButton>
 #include <QLabel>
-#include <QListView>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSlider>
@@ -33,6 +32,8 @@
 #include <QMetaObject>
 
 class ServerSyncManager;
+class FaceAlertController;
+class DetectionEventController;
 
 class MainWindow : public FramelessWindow
 {
@@ -53,6 +54,7 @@ private slots:
     void onEmbeddingModelSelected(const QString& modelPath);
     void handleServerStatus(const QString& status);
     void handleServerError(const QString& error);
+    void handleManualSync();
 
 private:
     // === UI elements ===
@@ -61,14 +63,13 @@ private:
     QLabel* titleLabel;
     QLabel* modelInfoLabel = nullptr;
     QPushButton* btnMinimize;
+    QPushButton* btnSync;
     QPushButton* btnMaximize;
     QPushButton* btnClose;
     QPushButton* btnSettings;
 
     QListWidget* listModes;
     QStackedWidget* stackedWidget;
-    QListView* consoleView;
-
     SnapPreviewWindow* snapPreview;
 
     QWidget* settingsPopup = nullptr;
@@ -84,6 +85,8 @@ private:
     Face3DViewerPage* face3dPage = nullptr;
     SettingsPage* settingsPage = nullptr;
     ServerSyncManager* serverSync = nullptr;
+    FaceAlertController* faceAlertController = nullptr;
+    DetectionEventController* detectionEventController = nullptr;
     QString embedModelPath;
     QThread* aiThread = nullptr;
     int cachedRecognitionInterval = 500;
@@ -100,7 +103,6 @@ private:
     void setupSettingsPopup();
     void refreshSettingsUi();
     void setupSidebar();
-    void setupConsole();
     void setupConnections();
     bool loadDetectionModel(const QString& modelPath, const QString& configPath, bool warnOnFailure = true);
     bool loadEmbeddingModel(const QString& modelPath, bool warnOnFailure = true);

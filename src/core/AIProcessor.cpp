@@ -1363,6 +1363,7 @@ QVector<Detection> AIProcessor::stabilizeFaces(const QVector<Detection>& rawDete
                 if (!embedding.empty()) {
                     const QString autoName = makeAutoLabel();
                     const QString previewPath = saveFacePreview(autoName, faceCrops[detIndex]);
+                    QVector<float> qtEmbedding = QVector<float>(embedding.begin(), embedding.end());
                     if (!previewPath.isEmpty() && storeEmbeddingEntry(autoName, std::move(embedding), previewPath)) {
                         track.stableLabel = autoName;
                         track.candidateLabel.clear();
@@ -1373,6 +1374,8 @@ QVector<Detection> AIProcessor::stabilizeFaces(const QVector<Detection>& rawDete
                         track.lastSimilarity = -1.0f;
                         autoEnrollTimer.restart();
                         recognized = true;
+                        const QImage previewImage(previewPath);
+                        emit faceAutoEnrolled(autoName, qtEmbedding, previewImage);
                     }
                 }
             }

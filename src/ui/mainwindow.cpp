@@ -5,6 +5,8 @@
 
 #include "MainWindow.h"
 #include "../core/ServerSyncManager.h"
+#include "../core/DetectionEventController.h"
+#include "FaceAlertController.h"
 #include <QApplication>
 #include <QDebug>
 #include <QIcon>
@@ -25,7 +27,6 @@ MainWindow::MainWindow(QWidget* parent)
     setupTitleBar();
     setupSettingsPopup();
     setupSidebar();
-    setupConsole();
     setupConnections();
 
     setWindowTitle("AI Smart Surveillance System");
@@ -73,6 +74,7 @@ void MainWindow::setupUi()
     modelInfoLabel->setObjectName("modelInfoLabel");
     modelInfoLabel->setStyleSheet("font-size:11px; color:#94a3b8;");
     modelInfoLabel->setAlignment(Qt::AlignVCenter);
+    btnSync = new QPushButton(QStringLiteral("⟳"));
     btnSettings = new QPushButton(QStringLiteral("\u2699"));
     btnMinimize = new QPushButton("-");
     btnMaximize = new QPushButton("?");
@@ -80,16 +82,18 @@ void MainWindow::setupUi()
     btnClose->setObjectName("btnClose");
     btnSettings->setObjectName("btnSettings");
 
-    for (auto* b : { btnSettings, btnMinimize, btnMaximize, btnClose }) {
+    for (auto* b : { btnSync, btnSettings, btnMinimize, btnMaximize, btnClose }) {
         b->setFixedSize(32, 28);
         b->setFlat(true);
     }
+    btnSync->setToolTip(tr("Sync now"));
     btnSettings->setToolTip(tr("Settings"));
 
     titleLayout->addWidget(IconName);
     titleLayout->addWidget(titleLabel);
     titleLayout->addWidget(modelInfoLabel, 0, Qt::AlignLeft);
     titleLayout->addStretch();
+    titleLayout->addWidget(btnSync);
     titleLayout->addWidget(btnSettings);
     titleLayout->addWidget(btnMinimize);
     titleLayout->addWidget(btnMaximize);
@@ -212,15 +216,15 @@ void MainWindow::setupUi()
     connect(aiThread, &QThread::finished, aiProcessor, &QObject::deleteLater);
     aiThread->start();
 
+    serverSync = new ServerSyncManager(this);
+    serverSync->setAiProcessor(aiProcessor);
+
     camerasPage = new CamerasPage(cameraManager, aiProcessor, this);
     analyticsPage = new AnalyticsPage(cameraManager, aiProcessor, this);
-    faceDbPage = new FaceDatabasePage(aiProcessor, this);
+    faceDbPage = new FaceDatabasePage(serverSync, this);
     face3dPage = new Face3DViewerPage(aiProcessor, this);
 
     settingsPage = new SettingsPage(modelsDirectory, this);
-
-    serverSync = new ServerSyncManager(this);
-    serverSync->setAiProcessor(aiProcessor);
     connect(serverSync, &ServerSyncManager::personsUpdated, faceDbPage, &FaceDatabasePage::setRemotePersons);
     connect(serverSync, &ServerSyncManager::statusMessage, this, &MainWindow::handleServerStatus);
     connect(serverSync, &ServerSyncManager::errorMessage, this, &MainWindow::handleServerError);
@@ -230,6 +234,9 @@ void MainWindow::setupUi()
                 serverSync->requestImmediatePersonsRefresh();
         });
     }
+    faceAlertController = new FaceAlertController(aiProcessor, serverSync, this, this);
+    detectionEventController = new DetectionEventController(aiProcessor, serverSync, this);
+
     stackedWidget->addWidget(dashboard);
     stackedWidget->addWidget(camerasPage);
     stackedWidget->addWidget(faceDbPage);
@@ -243,12 +250,8 @@ void MainWindow::setupUi()
     centerLayout->addWidget(listModes);
     centerLayout->addWidget(stackedWidget, 1);
 
-    consoleView = new QListView;
-    consoleView->setFixedHeight(180);
-
     mainLayout->addWidget(titleBar);
     mainLayout->addLayout(centerLayout, 1);
-    mainLayout->addWidget(consoleView);
 
     setCentralWidget(central);
 
@@ -349,19 +352,6 @@ void MainWindow::setupSidebar()
     )");
 }
 
-// === Console ===
-void MainWindow::setupConsole()
-{
-    consoleView->setStyleSheet(R"(
-        QListView {
-            background:#0d0d0d;
-            color:#00FF6E;
-            font-family:Consolas;
-            font-size:13px;
-            border-top:1px solid #222;
-        }
-    )");
-}
 
 // === Connections ===
 void MainWindow::setupConnections()
@@ -369,6 +359,8 @@ void MainWindow::setupConnections()
     connect(listModes, &QListWidget::currentRowChanged,
         this, &MainWindow::onModeChanged);
     connect(btnSettings, &QPushButton::clicked, this, &MainWindow::toggleSettingsPopup);
+    if (btnSync)
+        connect(btnSync, &QPushButton::clicked, this, &MainWindow::handleManualSync);
     if (recognitionSlider)
         connect(recognitionSlider, &QSlider::valueChanged, this, &MainWindow::handleRecognitionSlider);
     if (gpuToggle)
@@ -583,4 +575,12 @@ void MainWindow::initializeServerSync(const LoginSession& session)
         serverSync->applySessionToken(session.auth.token, session.auth.expiresAt);
     serverSync->start();
     qInfo() << "[MainWindow]" << "Server synchronization initialized";
+}
+
+void MainWindow::handleManualSync()
+{
+    if (!serverSync)
+        return;
+    qInfo() << "[MainWindow]" << "Manual sync requested by user";
+    serverSync->requestImmediatePersonsRefresh();
 }

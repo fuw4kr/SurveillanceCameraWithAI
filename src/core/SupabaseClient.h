@@ -4,6 +4,7 @@
 #include "ServerTypes.h"
 #include <QDateTime>
 #include <QObject>
+#include <QImage>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QUrl>
@@ -46,6 +47,13 @@ public:
     void fetchPersons();
     void postEvent(const EventPayload& event);
     void postEvents(const QList<EventPayload>& events);
+    void postAlert(const QString& alertType, const QString& message, const QString& severity = QStringLiteral("medium"));
+    void createPerson(const QString& name, const QString& role, bool authorized, const QString& imageUrl = QString());
+    void updatePerson(const QString& personId, const QJsonObject& fields);
+    void deletePerson(const QString& personId);
+    void fetchEmbeddings();
+    void postEmbedding(const QString& personId, const QString& modelName, const QVector<float>& vector);
+    void uploadPersonAvatar(const QString& personId, const QImage& image);
 
 signals:
     void loginFinished(const AuthResult& result);
@@ -53,12 +61,32 @@ signals:
     void personsFetchFailed(const QString& error);
     void eventPosted(const EventPayload& event);
     void eventPostFailed(const EventPayload& event, const QString& error);
+    void alertPosted();
+    void alertPostFailed(const QString& error);
+    void personCreated(const PersonRecord& person);
+    void personCreateFailed(const QString& error);
+    void personUpdated(const PersonRecord& person);
+    void personUpdateFailed(const QString& error);
+    void personDeleted(const QString& personId);
+    void personDeleteFailed(const QString& error);
+    void embeddingsFetched(const QList<EmbeddingRecord>& embeddings);
+    void embeddingsFetchFailed(const QString& error);
+    void embeddingPosted();
+    void embeddingPostFailed(const QString& error);
+    void avatarUploaded();
+    void avatarUploadFailed(const QString& error);
 
 private:
     void handleLoginReply(QNetworkReply* reply);
     void handlePersonsReply(QNetworkReply* reply);
     void handleEventReply(QNetworkReply* reply, const EventPayload& event);
-    QNetworkRequest authorizedRequest(const QString& path) const;
+    void handleAlertReply(QNetworkReply* reply);
+    void handlePersonReply(QNetworkReply* reply);
+    void handlePersonUpdateReply(QNetworkReply* reply);
+    void handlePersonDeleteReply(QNetworkReply* reply, const QString& personId);
+    void handleEmbeddingsReply(QNetworkReply* reply);
+    void handleEmbeddingReply(QNetworkReply* reply);
+    QNetworkRequest authorizedRequest(const QString& path, bool jsonContent = true) const;
 
     QNetworkAccessManager network;
     QUrl baseUrl{ QStringLiteral("https://myserver-tc2d.onrender.com") };

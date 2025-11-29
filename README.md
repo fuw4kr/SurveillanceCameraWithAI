@@ -149,7 +149,7 @@ To keep secrets out of source control, set environment variables instead of touc
 | `SURV_PASSWORD`   | Login password                         |
 | `SURV_SYNC_MS`    | Poll/sync interval (milliseconds)      |
 
-The face database page shows the remote persons table alongside the local embeddings, and the “Reload” button triggers an immediate `/api/persons` fetch. Detection events emitted by `AIProcessor` are queued and POSTed upstream with automatic retries so the backend continues receiving updates, even if frames arrive faster than the network allows.
+The face database page shows the remote persons table alongside the local embeddings, and the "Reload" button triggers an immediate `/api/persons` fetch. Detection events emitted by `AIProcessor` are queued and POSTed upstream with automatic retries so the backend continues receiving updates, even if frames arrive faster than the network allows. Unknown faces now trigger an on-screen dialog so the operator can either mark them as "unknown" (raising a `/api/alerts` entry) or immediately register the person with name/role via `/api/persons`.
 
 ## Diagnostics & logging
 

@@ -3,6 +3,9 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
+#include <QDir>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QtGlobal>
@@ -38,10 +41,26 @@ ServerSyncManager::ServerSyncManager(QObject* parent)
     connect(client, &SupabaseClient::personsFetchFailed, this, &ServerSyncManager::handlePersonsFetchFailed);
     connect(client, &SupabaseClient::eventPosted, this, &ServerSyncManager::handleEventPosted);
     connect(client, &SupabaseClient::eventPostFailed, this, &ServerSyncManager::handleEventPostFailed);
+    connect(client, &SupabaseClient::alertPosted, this, &ServerSyncManager::handleAlertPosted);
+    connect(client, &SupabaseClient::alertPostFailed, this, &ServerSyncManager::handleAlertFailed);
+    connect(client, &SupabaseClient::personCreated, this, &ServerSyncManager::handlePersonCreated);
+    connect(client, &SupabaseClient::personCreateFailed, this, &ServerSyncManager::handlePersonFailed);
+    connect(client, &SupabaseClient::personUpdated, this, &ServerSyncManager::handlePersonUpdated);
+    connect(client, &SupabaseClient::personUpdateFailed, this, &ServerSyncManager::handlePersonUpdateFailed);
+    connect(client, &SupabaseClient::personDeleted, this, &ServerSyncManager::handlePersonDeleted);
+    connect(client, &SupabaseClient::personDeleteFailed, this, &ServerSyncManager::handlePersonDeleteFailed);
+    connect(client, &SupabaseClient::embeddingsFetched, this, &ServerSyncManager::handleEmbeddingsFetched);
+    connect(client, &SupabaseClient::embeddingsFetchFailed, this, &ServerSyncManager::handleEmbeddingsFetchFailed);
+    connect(client, &SupabaseClient::embeddingPosted, this, &ServerSyncManager::handleEmbeddingPosted);
+    connect(client, &SupabaseClient::embeddingPostFailed, this, &ServerSyncManager::handleEmbeddingFailed);
+    connect(client, &SupabaseClient::avatarUploaded, this, &ServerSyncManager::handleAvatarUploaded);
+    connect(client, &SupabaseClient::avatarUploadFailed, this, &ServerSyncManager::handleAvatarUploadFailed);
 
     syncTimer.setSingleShot(false);
     syncTimer.setInterval(syncIntervalMs);
     connect(&syncTimer, &QTimer::timeout, this, &ServerSyncManager::handleSyncTick);
+
+    embeddingsPath = QCoreApplication::applicationDirPath() + QStringLiteral("/config/embeddings_remote.json");
 }
 
 void ServerSyncManager::setCredentials(const QString& emailValue, const QString& passwordValue)
@@ -63,6 +82,101 @@ void ServerSyncManager::clearSession()
 {
     if (client)
         client->clearSession();
+}
+
+void ServerSyncManager::sendUnknownAlert(const QString& cameraLabel, const QString& note)
+{
+    const QString alertType = QStringLiteral("unknown_face");
+    QString message = note;
+    if (message.isEmpty())
+        message = tr("Unknown face detected on %1").arg(cameraLabel);
+    if (!client->isAuthenticated() && !ensureAuthenticated()) {
+        emit alertSubmissionFailed(tr("Not authenticated"));
+        return;
+    }
+    qInfo() << "[ServerSync]" << "Submitting unknown-face alert for" << cameraLabel << ":" << message;
+    client->postAlert(alertType, message, QStringLiteral("high"));
+}
+
+void ServerSyncManager::submitPersonRecord(const QString& name, const QString& role, bool authorized)
+{
+    if (!client->isAuthenticated() && !ensureAuthenticated()) {
+        emit personSubmissionFailed(tr("Not authenticated"));
+        return;
+    }
+    qInfo() << "[ServerSync]" << "Submitting person record:" << name << role << "auth" << authorized;
+    client->createPerson(name, role, authorized);
+}
+
+QString ServerSyncManager::personIdForName(const QString& name) const
+{
+    if (name.isEmpty())
+        return {};
+    const QString key = name.toLower();
+    return personIndex.contains(key) ? personIndex.value(key).id : QString();
+}
+
+void ServerSyncManager::sendDetectionStatus(const QString& personId, int cameraId, bool active, const QDateTime& timestamp)
+{
+    if (personId.isEmpty())
+        return;
+    if (!client->isAuthenticated() && !ensureAuthenticated())
+        return;
+    EventPayload payload;
+    payload.eventType = active ? QStringLiteral("face_detected") : QStringLiteral("face_lost");
+    payload.personId = personId;
+    payload.cameraLabel = QStringLiteral("Camera %1").arg(cameraId);
+    payload.timestamp = timestamp.isValid() ? timestamp : QDateTime::currentDateTimeUtc();
+    client->postEvent(payload);
+    qInfo() << "[ServerSync]" << payload.eventType << "reported for person" << personId << "camera" << cameraId;
+}
+
+void ServerSyncManager::renamePerson(const QString& personId, const QString& newName)
+{
+    if (personId.isEmpty() || newName.trimmed().isEmpty()) {
+        emit errorMessage(tr("Select a valid person to rename."));
+        return;
+    }
+    if (!client->isAuthenticated() && !ensureAuthenticated())
+        return;
+    QJsonObject fields;
+    fields.insert(QStringLiteral("name"), newName.trimmed());
+    client->updatePerson(personId, fields);
+    emit statusMessage(tr("Updating \"%1\"...").arg(newName));
+}
+
+void ServerSyncManager::deletePerson(const QString& personId)
+{
+    if (personId.isEmpty()) {
+        emit errorMessage(tr("Select a person to delete."));
+        return;
+    }
+    if (!client->isAuthenticated() && !ensureAuthenticated())
+        return;
+    client->deletePerson(personId);
+    emit statusMessage(tr("Deleting person..."));
+}
+
+void ServerSyncManager::uploadEmbedding(const QString& personId, const QString& modelName, const QVector<float>& vector)
+{
+    if (personId.isEmpty() || vector.isEmpty()) {
+        emit errorMessage(tr("Missing embedding data."));
+        return;
+    }
+    if (!client->isAuthenticated() && !ensureAuthenticated())
+        return;
+    client->postEmbedding(personId, modelName, vector);
+}
+
+void ServerSyncManager::uploadPersonAvatar(const QString& personId, const QImage& image)
+{
+    if (personId.isEmpty() || image.isNull()) {
+        emit errorMessage(tr("Missing avatar image."));
+        return;
+    }
+    if (!client->isAuthenticated() && !ensureAuthenticated())
+        return;
+    client->uploadPersonAvatar(personId, image);
 }
 
 bool ServerSyncManager::loadConfig(const QString& path)
@@ -137,21 +251,14 @@ void ServerSyncManager::setAiProcessor(AIProcessor* processor)
     if (aiProcessor)
         disconnect(aiProcessor, nullptr, this, nullptr);
     aiProcessor = processor;
-    if (aiProcessor) {
-        connect(aiProcessor, &AIProcessor::frameProcessed,
-            this, &ServerSyncManager::handleFrameProcessed,
-            Qt::QueuedConnection);
-    }
 }
 
 void ServerSyncManager::start()
 {
     if (!configLoaded)
         loadConfig(QString());
-    if (!syncTimer.isActive())
-        syncTimer.start();
     handleSyncTick();
-    qInfo() << "[ServerSync]" << "Synchronization timer started";
+    qInfo() << "[ServerSync]" << "Manual synchronization ready";
 }
 
 void ServerSyncManager::requestImmediatePersonsRefresh()
@@ -177,10 +284,18 @@ void ServerSyncManager::handleLoginResult(const AuthResult& result)
 void ServerSyncManager::handlePersonsFetched(const QList<PersonRecord>& persons)
 {
     personsCache = persons;
+    personIndex.clear();
+    personsById.clear();
+    for (const auto& person : persons) {
+        if (!person.name.isEmpty())
+            personIndex.insert(person.name.toLower(), person);
+        personsById.insert(person.id, person);
+    }
     personsRequestActive = false;
     emit personsUpdated(persons);
     emit statusMessage(tr("Synced %1 person records").arg(persons.size()));
     qInfo() << "[ServerSync]" << "Persons sync completed:" << persons.size() << "records";
+    requestEmbeddingsRefresh();
 }
 
 void ServerSyncManager::handlePersonsFetchFailed(const QString& error)
@@ -221,7 +336,7 @@ void ServerSyncManager::handleSyncTick()
         return;
     requestPersonsRefresh();
     flushEventQueue();
-    qInfo() << "[ServerSync]" << "Periodic sync executed";
+    qInfo() << "[ServerSync]" << "Manual sync executed";
 }
 
 void ServerSyncManager::handleFrameProcessed(int cameraId, const QImage&, const QVector<Detection>& detections, const QSize&)
@@ -229,6 +344,107 @@ void ServerSyncManager::handleFrameProcessed(int cameraId, const QImage&, const 
     enqueueDetections(cameraId, detections);
     if (!detections.isEmpty())
         qInfo() << "[ServerSync]" << "Queued" << detections.size() << "detections from camera" << cameraId;
+}
+
+void ServerSyncManager::handleAlertPosted()
+{
+    qInfo() << "[ServerSync]" << "Alert posted to server";
+    emit alertSubmitted();
+}
+
+void ServerSyncManager::handleAlertFailed(const QString& error)
+{
+    qWarning() << "[ServerSync]" << "Alert submission failed:" << error;
+    emit alertSubmissionFailed(error);
+}
+
+void ServerSyncManager::handlePersonCreated(const PersonRecord& person)
+{
+    qInfo() << "[ServerSync]" << "Person created on server:" << person.name;
+    emit personSubmitted(person);
+}
+
+void ServerSyncManager::handlePersonFailed(const QString& error)
+{
+    qWarning() << "[ServerSync]" << "Person submission failed:" << error;
+    emit personSubmissionFailed(error);
+}
+
+void ServerSyncManager::handlePersonUpdated(const PersonRecord& person)
+{
+    qInfo() << "[ServerSync]" << "Person updated on server:" << person.name;
+    emit statusMessage(tr("Updated \"%1\"").arg(person.name));
+    requestImmediatePersonsRefresh();
+}
+
+void ServerSyncManager::handlePersonUpdateFailed(const QString& error)
+{
+    qWarning() << "[ServerSync]" << "Person update failed:" << error;
+    emit errorMessage(tr("Failed to update person: %1").arg(error));
+}
+
+void ServerSyncManager::handlePersonDeleted(const QString& personId)
+{
+    qInfo() << "[ServerSync]" << "Person deleted:" << personId;
+    emit statusMessage(tr("Deleted person from server."));
+    requestImmediatePersonsRefresh();
+}
+
+void ServerSyncManager::handlePersonDeleteFailed(const QString& error)
+{
+    qWarning() << "[ServerSync]" << "Person delete failed:" << error;
+    emit errorMessage(tr("Failed to delete person: %1").arg(error));
+}
+
+void ServerSyncManager::handleEmbeddingsFetched(const QList<EmbeddingRecord>& embeddings)
+{
+    embeddingsRequestActive = false;
+    embeddingsCache = embeddings;
+    QString persistError;
+    if (writeEmbeddingsFile(embeddings, &persistError)) {
+        if (aiProcessor && !embeddingsPath.isEmpty())
+            aiProcessor->loadKnownEmbeddings(embeddingsPath);
+        emit statusMessage(tr("Synced %1 embeddings").arg(embeddings.size()));
+        qInfo() << "[ServerSync]" << "Embeddings sync completed:" << embeddings.size();
+    } else {
+        if (persistError.isEmpty())
+            persistError = tr("Unknown error");
+        emit errorMessage(tr("Failed to persist embeddings data: %1").arg(persistError));
+    }
+}
+
+void ServerSyncManager::handleEmbeddingsFetchFailed(const QString& error)
+{
+    embeddingsRequestActive = false;
+    qWarning() << "[ServerSync]" << "Embeddings fetch failed:" << error;
+    emit errorMessage(tr("Failed to fetch embeddings: %1").arg(error));
+}
+
+void ServerSyncManager::handleEmbeddingPosted()
+{
+    qInfo() << "[ServerSync]" << "Embedding uploaded successfully";
+    requestEmbeddingsRefresh();
+    emit embeddingUploaded();
+}
+
+void ServerSyncManager::handleEmbeddingFailed(const QString& error)
+{
+    qWarning() << "[ServerSync]" << "Embedding upload failed:" << error;
+    emit errorMessage(tr("Failed to upload embedding: %1").arg(error));
+    emit embeddingUploadFailed(error);
+}
+
+void ServerSyncManager::handleAvatarUploaded()
+{
+    qInfo() << "[ServerSync]" << "Avatar uploaded successfully";
+    emit avatarUploaded();
+}
+
+void ServerSyncManager::handleAvatarUploadFailed(const QString& error)
+{
+    qWarning() << "[ServerSync]" << "Avatar upload failed:" << error;
+    emit errorMessage(tr("Failed to upload avatar: %1").arg(error));
+    emit avatarUploadFailed(error);
 }
 
 void ServerSyncManager::enqueueDetections(int cameraId, const QVector<Detection>& detections)
@@ -276,6 +492,16 @@ void ServerSyncManager::requestPersonsRefresh()
     client->fetchPersons();
 }
 
+void ServerSyncManager::requestEmbeddingsRefresh()
+{
+    if (embeddingsRequestActive)
+        return;
+    if (!client->isAuthenticated())
+        return;
+    embeddingsRequestActive = true;
+    client->fetchEmbeddings();
+}
+
 bool ServerSyncManager::ensureAuthenticated()
 {
     if (client->isAuthenticated())
@@ -291,4 +517,60 @@ bool ServerSyncManager::ensureAuthenticated()
     emit statusMessage(tr("Connecting to %1").arg(serverUrl.toString()));
     client->login(email, password);
     return false;
+}
+
+bool ServerSyncManager::writeEmbeddingsFile(const QList<EmbeddingRecord>& embeddings, QString* errorOut) const
+{
+    auto setError = [&](const QString& message) {
+        if (errorOut)
+            *errorOut = message;
+    };
+    if (embeddingsPath.isEmpty()) {
+        setError(tr("Embeddings path is not configured"));
+        return false;
+    }
+    QJsonArray array;
+    for (const auto& record : embeddings) {
+        const PersonRecord person = personsById.value(record.personId);
+        if (person.id.isEmpty() || record.vector.isEmpty())
+            continue;
+        QJsonObject obj;
+        obj.insert(QStringLiteral("id"), person.id);
+        obj.insert(QStringLiteral("name"), person.name.isEmpty() ? person.id : person.name);
+        obj.insert(QStringLiteral("samples"), 1);
+        if (!person.imageUrl.isEmpty())
+            obj.insert(QStringLiteral("image"), person.imageUrl);
+        QJsonArray vecArray;
+        for (float v : record.vector)
+            vecArray.append(v);
+        obj.insert(QStringLiteral("embedding"), vecArray);
+        array.append(obj);
+    }
+    QFile file(embeddingsPath);
+    QDir dir(QFileInfo(file).dir());
+    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+        const QString message = tr("Failed to create embeddings directory: %1").arg(dir.absolutePath());
+        qWarning() << "[ServerSync]" << message;
+        setError(message);
+        return false;
+    }
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        const QString message = tr("Unable to open embeddings file %1: %2").arg(embeddingsPath, file.errorString());
+        qWarning() << "[ServerSync]" << message;
+        setError(message);
+        return false;
+    }
+    const QByteArray payload = QJsonDocument(array).toJson(QJsonDocument::Indented);
+    if (file.write(payload) < 0) {
+        const QString message = tr("Failed to write embeddings file %1: %2").arg(embeddingsPath, file.errorString());
+        qWarning() << "[ServerSync]" << message;
+        setError(message);
+        return false;
+    }
+    return true;
+}
+
+PersonRecord ServerSyncManager::personById(const QString& id) const
+{
+    return personsById.value(id);
 }

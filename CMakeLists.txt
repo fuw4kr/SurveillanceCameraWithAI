@@ -160,6 +160,8 @@ set(SOURCES
     src/ui/pages/settingsPage.cpp
     src/ui/widgets/cameraViewWidget.cpp
     src/ui/widgets/faceMeshView.cpp
+    src/ui/FaceAlertController.cpp
+    src/ui/dialogs/UnknownFaceDialog.cpp
 
     
     src/core/cameraManager.cpp
@@ -172,6 +174,7 @@ set(SOURCES
     src/core/SupabaseClient.cpp
     src/core/ServerSyncManager.cpp
     src/core/AppLogger.cpp
+    src/core/DetectionEventController.cpp
 
 )
 
@@ -198,8 +201,11 @@ set(HEADERS
     src/core/ServerSyncManager.h
     src/core/ServerTypes.h
     src/core/AppLogger.h
+    src/core/DetectionEventController.h
     src/ui/widgets/cameraViewWidget.h
     src/ui/widgets/faceMeshView.h
+    src/ui/FaceAlertController.h
+    src/ui/dialogs/UnknownFaceDialog.h
 )
 
 # ======================================================

@@ -3,6 +3,7 @@
 
 #include <QDateTime>
 #include <QList>
+#include <QVector>
 #include <QMetaType>
 #include <QString>
 #include <QVariant>
@@ -26,10 +27,21 @@ struct EventPayload {
     float confidence = 0.0f;
     QString cameraLabel;
     QDateTime timestamp;
+    QString personId;
+};
+
+struct EmbeddingRecord {
+    QString id;
+    QString personId;
+    QString modelName;
+    QVector<float> vector;
+    QDateTime createdAt;
 };
 
 Q_DECLARE_METATYPE(PersonRecord)
 Q_DECLARE_METATYPE(QList<PersonRecord>)
 Q_DECLARE_METATYPE(EventPayload)
+Q_DECLARE_METATYPE(EmbeddingRecord)
+Q_DECLARE_METATYPE(QList<EmbeddingRecord>)
 
 #endif // SERVERTYPES_H

@@ -96,6 +96,7 @@ signals:
     void recognitionIntervalChanged(int intervalMs);
     void embeddingBackendChanged(bool preferGpu);
     void faceDatabaseChanged();
+    void faceAutoEnrolled(const QString& label, const QVector<float>& embedding, const QImage& preview);
 
 private:
     struct LabeledEmbedding {
