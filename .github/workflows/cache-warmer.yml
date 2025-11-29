@@ -24,6 +24,9 @@ jobs:
         run: |
           $hash = Get-FileHash "vcpkg.json" -Algorithm SHA256
           echo "KEY=${{ runner.os }}-vcpkg-$($hash.Hash)" >> $env:GITHUB_OUTPUT
+      # 1. МАГІЧНИЙ КРОК: Створюємо папку вручну, щоб actions/cache не видавав помилку
+      - name: Create archive directory
+        run: New-Item -ItemType Directory -Force -Path "${{ env.ARCHIVE_PATH }}"
 
       # 1. МАГІЧНИЙ КРОК: Створюємо папку вручну, щоб actions/cache не видавав помилку
       - name: Create archive directory
