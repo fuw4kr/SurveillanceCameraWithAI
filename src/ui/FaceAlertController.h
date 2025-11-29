@@ -49,6 +49,7 @@ private slots:
     void handleEmbeddingFailed(const QString& error);
     void handleAvatarUploaded();
     void handleAvatarUploadFailed(const QString& error);
+    void handlePersonsDirectoryUpdated(const QList<PersonRecord>& persons);
 
 private:
     struct RecentFace {
@@ -63,6 +64,7 @@ private:
     void presentNext();
     void handleUnknownSelection(const PendingFaceAlert& alert);
     void handleKnownSelection(const PendingFaceAlert& alert, const QString& name, const QString& role, bool authorized);
+    QString nextUnknownLabel();
 
     AIProcessor* aiProcessor = nullptr;
     ServerSyncManager* serverSync = nullptr;
@@ -78,6 +80,7 @@ private:
     bool awaitingPersonCreation = false;
     bool embeddingPending = false;
     bool avatarPending = false;
+    int unknownCounter = 1;
 };
 
 #endif // FACEALERTCONTROLLER_H

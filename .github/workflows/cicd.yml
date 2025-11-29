@@ -4,8 +4,6 @@ on:
   push:
     branches: [ main ]
     tags: [ 'v*' ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
     inputs:
       build_type:
@@ -82,17 +80,19 @@ jobs:
         id: cache-vcpkg
         uses: actions/cache@v4
         with:
-          path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
+          path: |
+            C:\Users\runneradmin\AppData\Local\vcpkg\archives
+            C:\Users\runneradmin\AppData\Local\vcpkg\installed
           key: ${{ steps.cache-key.outputs.KEY }}
           restore-keys: |
-             Windows-vcpkg-9D662B1FB17BA73F3E982944A71A754A1ADE1EB0BF99655EE23B8EE5725A3643
+            ${{ runner.os }}-vcpkg-
 
       - name: Install Dependencies (vcpkg)
-        if: steps.cache.outputs.cache-hit != 'true' 
+        if: steps.cache-vcpkg.outputs.cache-hit != 'true'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgJsonGlob: '**/vcpkg.json'
-          runVcpkgInstall: true 
+          runVcpkgInstall: true
           
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v4

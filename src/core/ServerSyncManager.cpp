@@ -1,5 +1,5 @@
 #include "ServerSyncManager.h"
-#include "CameraManager.h"
+#include "cameraManager.h"
 
 #include <QCoreApplication>
 #include <QDebug>
