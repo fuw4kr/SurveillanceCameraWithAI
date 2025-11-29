@@ -1,4 +1,10 @@
-#include "UnknownFaceDialog.h"
+﻿/**
+ * @file UnknownFaceDialog.cpp
+ * @brief Implements the modal dialog for unknown face handling and enrollment.
+ *
+ * Presents a snapshot preview, camera metadata, and actions to mark the face as
+ * unknown or save it as a known person with role/authorization.
+ */#include "UnknownFaceDialog.h"
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -20,12 +26,12 @@ UnknownFaceDialog::UnknownFaceDialog(const QImage& snapshot, const QString& came
 void UnknownFaceDialog::setupUi(const QImage& snapshot, const QString& cameraLabel, qreal confidence)
 {
     auto* mainLayout = new QVBoxLayout(this);
-    auto* title = new QLabel(tr("Підтвердіть дію з розпізнаним обличчям"));
+    auto* title = new QLabel(tr("РџС–РґС‚РІРµСЂРґС–С‚СЊ РґС–СЋ Р· СЂРѕР·РїС–Р·РЅР°РЅРёРј РѕР±Р»РёС‡С‡СЏРј"));
     title->setStyleSheet(QStringLiteral("font-size:16px; font-weight:600;"));
     mainLayout->addWidget(title);
 
     auto* cameraLabelWidget = new QLabel(
-        tr("Камера: <b>%1</b><br/>Достовірність: <b>%2%</b>")
+        tr("РљР°РјРµСЂР°: <b>%1</b><br/>Р”РѕСЃС‚РѕРІС–СЂРЅС–СЃС‚СЊ: <b>%2%</b>")
             .arg(cameraLabel,
                 QString::number(static_cast<int>(confidence * 100.0))));
     cameraLabelWidget->setTextFormat(Qt::RichText);
@@ -40,13 +46,13 @@ void UnknownFaceDialog::setupUi(const QImage& snapshot, const QString& cameraLab
     mainLayout->addWidget(previewLabel, 0, Qt::AlignHCenter);
 
     auto* formLayout = new QVBoxLayout;
-    auto* nameLabel = new QLabel(tr("Ім'я співробітника (якщо відоме):"));
+    auto* nameLabel = new QLabel(tr("Р†Рј'СЏ СЃРїС–РІСЂРѕР±С–С‚РЅРёРєР° (СЏРєС‰Рѕ РІС–РґРѕРјРµ):"));
     nameEdit = new QLineEdit(this);
-    nameEdit->setPlaceholderText(tr("Ім'я та прізвище"));
-    auto* roleLabel = new QLabel(tr("Роль / посада:"));
+    nameEdit->setPlaceholderText(tr("Р†Рј'СЏ С‚Р° РїСЂС–Р·РІРёС‰Рµ"));
+    auto* roleLabel = new QLabel(tr("Р РѕР»СЊ / РїРѕСЃР°РґР°:"));
     roleEdit = new QLineEdit(this);
-    roleEdit->setPlaceholderText(tr("Напр. Охоронець, Гість, Співробітник"));
-    authorizedCheck = new QCheckBox(tr("Дозволений доступ"), this);
+    roleEdit->setPlaceholderText(tr("РќР°РїСЂ. РћС…РѕСЂРѕРЅРµС†СЊ, Р“С–СЃС‚СЊ, РЎРїС–РІСЂРѕР±С–С‚РЅРёРє"));
+    authorizedCheck = new QCheckBox(tr("Р”РѕР·РІРѕР»РµРЅРёР№ РґРѕСЃС‚СѓРї"), this);
 
     formLayout->addWidget(nameLabel);
     formLayout->addWidget(nameEdit);
@@ -56,11 +62,11 @@ void UnknownFaceDialog::setupUi(const QImage& snapshot, const QString& cameraLab
     mainLayout->addLayout(formLayout);
 
     auto* buttonLayout = new QHBoxLayout;
-    unknownButton = new QPushButton(tr("Невідоме обличчя"), this);
+    unknownButton = new QPushButton(tr("РќРµРІС–РґРѕРјРµ РѕР±Р»РёС‡С‡СЏ"), this);
     unknownButton->setStyleSheet(QStringLiteral("background:#f97316; color:white; font-weight:600;"));
-    saveButton = new QPushButton(tr("Зберегти як відоме"), this);
+    saveButton = new QPushButton(tr("Р—Р±РµСЂРµРіС‚Рё СЏРє РІС–РґРѕРјРµ"), this);
     saveButton->setStyleSheet(QStringLiteral("background:#16a34a; color:white; font-weight:600;"));
-    skipButton = new QPushButton(tr("Пропустити"), this);
+    skipButton = new QPushButton(tr("РџСЂРѕРїСѓСЃС‚РёС‚Рё"), this);
 
     buttonLayout->addWidget(unknownButton);
     buttonLayout->addWidget(saveButton);
@@ -82,11 +88,11 @@ void UnknownFaceDialog::setupUi(const QImage& snapshot, const QString& cameraLab
         const QString name = nameEdit->text().trimmed();
         const QString role = roleEdit->text().trimmed();
         if (name.isEmpty() || role.isEmpty()) {
-            QMessageBox::warning(this, tr("Заповніть поля"), tr("Вкажіть ім'я та роль перед збереженням."));
+            QMessageBox::warning(this, tr("Р—Р°РїРѕРІРЅС–С‚СЊ РїРѕР»СЏ"), tr("Р’РєР°Р¶С–С‚СЊ С–Рј'СЏ С‚Р° СЂРѕР»СЊ РїРµСЂРµРґ Р·Р±РµСЂРµР¶РµРЅРЅСЏРј."));
             return;
         }
         emit savePerson(name, role, authorizedCheck->isChecked());
-        setBusyState(tr("Створюємо запис на сервері..."));
+        setBusyState(tr("РЎС‚РІРѕСЂСЋС”РјРѕ Р·Р°РїРёСЃ РЅР° СЃРµСЂРІРµСЂС–..."));
     });
     connect(skipButton, &QPushButton::clicked, this, [this]() {
         emit skipped();
@@ -131,3 +137,4 @@ void UnknownFaceDialog::showSuccess(const QString& text)
         statusInfo->setText(text);
     }
 }
+
