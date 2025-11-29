@@ -56,7 +56,20 @@ EmbeddingRecord parseEmbeddingRecord(const QJsonObject& obj)
     record.createdAt = parseDateTime(obj.value(QStringLiteral("created_at")));
     const QJsonArray arr = obj.value(QStringLiteral("vector")).toArray();
     for (const auto& v : arr)
-    record.vector.append(static_cast<float>(v.toDouble()));
+        record.vector.append(static_cast<float>(v.toDouble()));
+    return record;
+}
+
+CameraRecord parseCameraRecord(const QJsonObject& obj)
+{
+    CameraRecord record;
+    record.id = obj.value(QStringLiteral("id")).toString();
+    record.name = obj.value(QStringLiteral("name")).toString();
+    record.ipAddress = obj.value(QStringLiteral("ip_address")).toString();
+    record.location = obj.value(QStringLiteral("location")).toString();
+    record.status = obj.value(QStringLiteral("status")).toString();
+    record.streamUrl = obj.value(QStringLiteral("stream_url")).toString();
+    record.createdAt = parseDateTime(obj.value(QStringLiteral("created_at")));
     return record;
 }
 
@@ -86,6 +99,7 @@ SupabaseClient::SupabaseClient(QObject* parent)
     qRegisterMetaType<QList<PersonRecord>>("QList<PersonRecord>");
     qRegisterMetaType<EventPayload>("EventPayload");
     qRegisterMetaType<QList<EmbeddingRecord>>("QList<EmbeddingRecord>");
+    qRegisterMetaType<QList<CameraRecord>>("QList<CameraRecord>");
 }
 
 void SupabaseClient::setAuthEndpoint(const QString& path)
@@ -152,7 +166,8 @@ void SupabaseClient::postEvent(const EventPayload& event)
         emit eventPostFailed(event, QStringLiteral("Not authenticated"));
         return;
     }
-    qInfo().noquote() << "[Supabase] Posting event" << event.eventType << "camera:" << event.cameraLabel << "confidence:" << event.confidence;
+    const QString cameraRef = event.cameraId.isEmpty() ? event.cameraLabel : event.cameraId;
+    qInfo().noquote() << "[Supabase] Posting event" << event.eventType << "camera:" << cameraRef << "confidence:" << event.confidence;
     QNetworkRequest req = authorizedRequest(QStringLiteral("/api/events"));
     QJsonObject payload;
     const QString eventType = event.eventType.isEmpty()
@@ -161,12 +176,14 @@ void SupabaseClient::postEvent(const EventPayload& event)
     payload.insert(QStringLiteral("event_type"), eventType);
     if (!event.personId.isEmpty())
         payload.insert(QStringLiteral("person_id"), event.personId);
+    if (!event.cameraId.isEmpty())
+        payload.insert(QStringLiteral("camera_id"), event.cameraId);
     if (event.confidence > 0.0f)
         payload.insert(QStringLiteral("confidence"), event.confidence);
     if (!event.timestamp.isNull())
         payload.insert(QStringLiteral("timestamp"), event.timestamp.toUTC().toString(Qt::ISODateWithMs));
-    if (!event.cameraLabel.isEmpty())
-        payload.insert(QStringLiteral("snapshot_url"), event.cameraLabel);
+    if (!event.snapshotUrl.isEmpty())
+        payload.insert(QStringLiteral("snapshot_url"), event.snapshotUrl);
 
     QNetworkReply* reply = network.post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, this, [this, reply, event]() {
@@ -180,17 +197,52 @@ void SupabaseClient::postEvents(const QList<EventPayload>& events)
         postEvent(ev);
 }
 
-void SupabaseClient::postAlert(const QString& alertType, const QString& message, const QString& severity)
+void SupabaseClient::postAlert(const QString& alertType, const QString& message, const QString& severity, const QImage& snapshot)
 {
     if (!isAuthenticated()) {
         emit alertPostFailed(QStringLiteral("Not authenticated"));
         return;
     }
+    const QString resolvedSeverity = severity.isEmpty() ? QStringLiteral("medium") : severity;
+    if (!snapshot.isNull()) {
+        QByteArray imageBytes;
+        QBuffer buffer(&imageBytes);
+        buffer.open(QIODevice::WriteOnly);
+        snapshot.save(&buffer, "PNG");
+
+        QHttpMultiPart* multipart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+        auto appendField = [&](const QString& name, const QString& value) {
+            QHttpPart part;
+            part.setHeader(QNetworkRequest::ContentDispositionHeader,
+                QVariant(QStringLiteral("form-data; name=\"%1\"").arg(name)));
+            part.setBody(value.toUtf8());
+            multipart->append(part);
+        };
+        appendField(QStringLiteral("alert_type"), alertType);
+        appendField(QStringLiteral("message"), message);
+        appendField(QStringLiteral("severity"), resolvedSeverity);
+
+        QHttpPart imagePart;
+        imagePart.setHeader(QNetworkRequest::ContentDispositionHeader,
+            QVariant(QStringLiteral("form-data; name=\"snapshot\"; filename=\"snapshot.png\"")));
+        imagePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("image/png")));
+        imagePart.setBody(imageBytes);
+        multipart->append(imagePart);
+
+        QNetworkRequest req = authorizedRequest(QStringLiteral("/api/alerts"), false);
+        QNetworkReply* reply = network.post(req, multipart);
+        multipart->setParent(reply);
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            handleAlertReply(reply);
+        });
+        return;
+    }
+
     QNetworkRequest req = authorizedRequest(QStringLiteral("/api/alerts"));
     QJsonObject payload;
     payload.insert(QStringLiteral("alert_type"), alertType);
     payload.insert(QStringLiteral("message"), message);
-    payload.insert(QStringLiteral("severity"), severity.isEmpty() ? QStringLiteral("medium") : severity);
+    payload.insert(QStringLiteral("severity"), resolvedSeverity);
     QNetworkReply* reply = network.post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         handleAlertReply(reply);
@@ -425,12 +477,94 @@ void SupabaseClient::handleAlertReply(QNetworkReply* reply)
 {
     if (!reply)
         return;
+    const QVariant statusAttr = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+    const QVariant reasonAttr = reply->attribute(QNetworkRequest::HttpReasonPhraseAttribute);
+    const int statusCode = statusAttr.isValid() ? statusAttr.toInt() : 0;
+    const QString reason = reasonAttr.isValid() ? reasonAttr.toString() : QString();
+    const QString errorText = reply->errorString();
+    const QByteArray body = reply->readAll();
+    const bool failed = reply->error() != QNetworkReply::NoError;
+    const QString detail = describeNetworkResponse(statusCode, reason, failed ? errorText : QString(), body, failed);
     reply->deleteLater();
-    if (reply->error() != QNetworkReply::NoError) {
-        emit alertPostFailed(reply->errorString());
+    if (failed) {
+        qWarning() << "[Supabase]" << "Alert post failed:" << detail;
+        emit alertPostFailed(detail);
         return;
     }
+    qInfo() << "[Supabase]" << "Alert posted:" << detail;
     emit alertPosted();
+}
+
+void SupabaseClient::fetchCameras()
+{
+    if (!isAuthenticated()) {
+        emit camerasFetchFailed(QStringLiteral("Not authenticated"));
+        return;
+    }
+    QNetworkRequest req = authorizedRequest(QStringLiteral("/api/cameras"));
+    QNetworkReply* reply = network.get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        handleCamerasReply(reply);
+    });
+}
+
+void SupabaseClient::createCamera(const QString& name, const QString& streamUrl, const QString& ipAddress, const QString& location, const QString& status)
+{
+    if (!isAuthenticated()) {
+        emit cameraCreateFailed(QStringLiteral("Not authenticated"));
+        return;
+    }
+    QJsonObject payload;
+    if (!name.isEmpty())
+        payload.insert(QStringLiteral("name"), name);
+    if (!ipAddress.isEmpty())
+        payload.insert(QStringLiteral("ip_address"), ipAddress);
+    if (!location.isEmpty())
+        payload.insert(QStringLiteral("location"), location);
+    if (!status.isEmpty())
+        payload.insert(QStringLiteral("status"), status);
+    if (!streamUrl.isEmpty())
+        payload.insert(QStringLiteral("stream_url"), streamUrl);
+    QNetworkRequest req = authorizedRequest(QStringLiteral("/api/cameras"));
+    QNetworkReply* reply = network.post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        handleCameraCreateReply(reply);
+    });
+}
+
+void SupabaseClient::deleteCamera(const QString& cameraId)
+{
+    if (!isAuthenticated()) {
+        emit cameraDeleteFailed(QStringLiteral("Not authenticated"));
+        return;
+    }
+    if (cameraId.isEmpty()) {
+        emit cameraDeleteFailed(QStringLiteral("Missing camera id"));
+        return;
+    }
+    QNetworkRequest req = authorizedRequest(QStringLiteral("/api/cameras/") + cameraId, false);
+    QNetworkReply* reply = network.deleteResource(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, cameraId]() {
+        handleCameraDeleteReply(reply, cameraId);
+    });
+}
+
+void SupabaseClient::updateCamera(const QString& cameraId, const QJsonObject& fields)
+{
+    if (!isAuthenticated()) {
+        emit cameraUpdateFailed(QStringLiteral("Not authenticated"));
+        return;
+    }
+    if (cameraId.isEmpty() || fields.isEmpty()) {
+        emit cameraUpdateFailed(QStringLiteral("Missing camera update payload"));
+        return;
+    }
+    QNetworkRequest req = authorizedRequest(QStringLiteral("/api/cameras/") + cameraId);
+    const QByteArray payload = QJsonDocument(fields).toJson(QJsonDocument::Compact);
+    QNetworkReply* reply = network.sendCustomRequest(req, QByteArrayLiteral("PATCH"), payload);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        handleCameraUpdateReply(reply);
+    });
 }
 
 void SupabaseClient::handlePersonReply(QNetworkReply* reply)
@@ -526,6 +660,83 @@ void SupabaseClient::handleEmbeddingReply(QNetworkReply* reply)
     }
     qInfo() << "[Supabase]" << "Embedding posted:" << detail;
     emit embeddingPosted();
+}
+
+void SupabaseClient::handleCamerasReply(QNetworkReply* reply)
+{
+    if (!reply)
+        return;
+    reply->deleteLater();
+    if (reply->error() != QNetworkReply::NoError) {
+        emit camerasFetchFailed(reply->errorString());
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (!doc.isArray()) {
+        emit camerasFetchFailed(QStringLiteral("Invalid payload"));
+        return;
+    }
+    QList<CameraRecord> cameras;
+    for (const auto& value : doc.array()) {
+        if (!value.isObject())
+            continue;
+        cameras.append(parseCameraRecord(value.toObject()));
+    }
+    emit camerasFetched(cameras);
+}
+
+void SupabaseClient::handleCameraCreateReply(QNetworkReply* reply)
+{
+    if (!reply)
+        return;
+    reply->deleteLater();
+    if (reply->error() != QNetworkReply::NoError) {
+        emit cameraCreateFailed(reply->errorString());
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (doc.isObject()) {
+        emit cameraCreated(parseCameraRecord(doc.object()));
+        return;
+    }
+    if (doc.isArray() && !doc.array().isEmpty() && doc.array().first().isObject()) {
+        emit cameraCreated(parseCameraRecord(doc.array().first().toObject()));
+        return;
+    }
+    emit cameraCreateFailed(QStringLiteral("Invalid response"));
+}
+
+void SupabaseClient::handleCameraDeleteReply(QNetworkReply* reply, const QString& cameraId)
+{
+    if (!reply)
+        return;
+    reply->deleteLater();
+    if (reply->error() != QNetworkReply::NoError) {
+        emit cameraDeleteFailed(reply->errorString());
+        return;
+    }
+    emit cameraDeleted(cameraId);
+}
+
+void SupabaseClient::handleCameraUpdateReply(QNetworkReply* reply)
+{
+    if (!reply)
+        return;
+    reply->deleteLater();
+    if (reply->error() != QNetworkReply::NoError) {
+        emit cameraUpdateFailed(reply->errorString());
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (doc.isObject()) {
+        emit cameraUpdated(parseCameraRecord(doc.object()));
+        return;
+    }
+    if (doc.isArray() && !doc.array().isEmpty() && doc.array().first().isObject()) {
+        emit cameraUpdated(parseCameraRecord(doc.array().first().toObject()));
+        return;
+    }
+    emit cameraUpdateFailed(QStringLiteral("Invalid response"));
 }
 
 

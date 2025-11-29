@@ -1,3 +1,8 @@
+/**
+ * @file CameraManager.h
+ * @brief Manages multiple local and IP cameras using OpenCV + Qt.
+ */
+
 #ifndef CAMERAMANAGER_H
 #define CAMERAMANAGER_H
 
@@ -111,6 +116,7 @@ public:
      * @example auto cameras = listAvailableCameras();
      */
     QStringList listAvailableCameras();
+    QString cameraSource(int id) const;
 
 signals:
     /**

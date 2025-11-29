@@ -116,21 +116,20 @@ void FaceMeshView::clearPointEntities()
 void FaceMeshView::clear()
 {
     clearPointEntities();
+    normalizedPoints.clear();
 }
 
 void FaceMeshView::setPoints(const QVector<QVector3D>& points)
 {
     rebuildPoints(points);
-    resetCamera(points);
+    resetCamera();
 }
 
 void FaceMeshView::rebuildPoints(const QVector<QVector3D>& points)
 {
     clearPointEntities();
-    if (!pointsRoot)
-        return;
-
-    if (points.isEmpty())
+    normalizedPoints.clear();
+    if (!pointsRoot || points.isEmpty())
         return;
 
     QVector3D minPoint = points.first();
@@ -148,14 +147,17 @@ void FaceMeshView::rebuildPoints(const QVector<QVector3D>& points)
     const float spanX = maxPoint.x() - minPoint.x();
     const float spanY = maxPoint.y() - minPoint.y();
     const float spanZ = maxPoint.z() - minPoint.z();
-    const float span = std::max(std::max(spanX, spanY), std::max(spanZ, 1.0f));
+    const float span = std::max({ spanX, spanY, std::max(spanZ, 1.0f) });
     const float scale = span > 0.0f ? (2.0f / span) : 1.0f;
     const int sampleCount = std::max(1, static_cast<int>(points.size()));
     const float density = std::pow(static_cast<float>(sampleCount), 1.0f / 3.0f);
     const float radius = std::max(0.008f, 0.12f / std::max(1.0f, density));
 
+    normalizedPoints.reserve(points.size());
+
     for (const QVector3D& rawPoint : points) {
-        QVector3D point = (rawPoint - center) * scale;
+        QVector3D normalized = (rawPoint - center) * scale;
+        normalizedPoints.append(normalized);
 
         auto* entity = new Qt3DCore::QEntity(pointsRoot);
         auto* mesh = new Qt3DExtras::QSphereMesh(entity);
@@ -164,7 +166,7 @@ void FaceMeshView::rebuildPoints(const QVector<QVector3D>& points)
         mesh->setSlices(16);
 
         auto* transform = new Qt3DCore::QTransform(entity);
-        transform->setTranslation(point);
+        transform->setTranslation(normalized);
 
         auto* material = new Qt3DExtras::QPhongMaterial(entity);
         material->setDiffuse(QColor("#4ade80"));
@@ -176,14 +178,14 @@ void FaceMeshView::rebuildPoints(const QVector<QVector3D>& points)
     }
 }
 
-void FaceMeshView::resetCamera(const QVector<QVector3D>& points)
+void FaceMeshView::resetCamera()
 {
-    if (!camera || points.isEmpty())
+    if (!camera || normalizedPoints.isEmpty())
         return;
 
-    QVector3D minPoint = points.first();
-    QVector3D maxPoint = points.first();
-    for (const QVector3D& p : points) {
+    QVector3D minPoint = normalizedPoints.first();
+    QVector3D maxPoint = normalizedPoints.first();
+    for (const QVector3D& p : normalizedPoints) {
         minPoint.setX(std::min(minPoint.x(), p.x()));
         minPoint.setY(std::min(minPoint.y(), p.y()));
         minPoint.setZ(std::min(minPoint.z(), p.z()));
@@ -196,8 +198,8 @@ void FaceMeshView::resetCamera(const QVector<QVector3D>& points)
     const float spanX = maxPoint.x() - minPoint.x();
     const float spanY = maxPoint.y() - minPoint.y();
     const float spanZ = maxPoint.z() - minPoint.z();
-    const float span = std::max(std::max(spanX, spanY), std::max(spanZ, 1.0f));
-    const float distance = std::max(3.0f, span * 3.0f);
+    const float span = std::max({ spanX, spanY, spanZ, 1.0f });
+    const float distance = std::max(3.0f, span * 1.5f);
 
     camera->setPosition(center + QVector3D(0.0f, 0.0f, distance));
     camera->setViewCenter(center);

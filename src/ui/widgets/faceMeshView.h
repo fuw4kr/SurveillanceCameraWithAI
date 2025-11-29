@@ -107,6 +107,7 @@ private:
     Qt3DRender::QCamera* camera = nullptr;
     Qt3DExtras::QOrbitCameraController* orbitController = nullptr;
     QVector<Qt3DCore::QEntity*> pointEntities;
+    QVector<QVector3D> normalizedPoints;
 };
 
 #endif // FACEMESHVIEW_H

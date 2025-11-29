@@ -27,6 +27,9 @@
 #include <QTimer>
 #include <QSize>
 #include <QVector>
+#include <QUrl>
+
+class CameraManager;
 
 /**
  * @brief Manages backend communication for detections, alerts, and person records.
@@ -69,6 +72,7 @@ public:
      * @throws None
      * @example sync.start();
      */
+    void setCameraManager(CameraManager* manager);
     void start();
     /**
      * @brief Immediately requests a refresh of persons data from the server.
@@ -120,6 +124,7 @@ public:
      * @throws None
      * @example sync.submitPersonRecord("Alice", "Staff", true);
      */
+    void sendUnknownAlert(const QString& cameraLabel, const QString& note, const QImage& snapshot = QImage());
     void submitPersonRecord(const QString& name, const QString& role, bool authorized);
     /**
      * @brief Resolves a person id by name if available in the cache.
@@ -156,6 +161,7 @@ public:
      * @throws None
      * @example sync.deletePerson(id);
      */
+    void updatePersonRole(const QString& personId, const QString& newRole);
     void deletePerson(const QString& personId);
     /**
      * @brief Requests latest embeddings from the server.
@@ -173,6 +179,8 @@ public:
      * @throws None
      * @example sync.uploadEmbedding(id, "ArcFace", embedding);
      */
+    void requestCamerasRefresh();
+    void requestImmediateCamerasRefresh();
     void uploadEmbedding(const QString& personId, const QString& modelName, const QVector<float>& vector);
     /**
      * @brief Uploads a person avatar image.
@@ -183,6 +191,10 @@ public:
      * @example sync.uploadPersonAvatar(id, avatarImage);
      */
     void uploadPersonAvatar(const QString& personId, const QImage& image);
+    void submitCameraRecord(const QString& name, const QString& streamUrl, const QString& ipAddress = QString(), const QString& location = QString());
+    void deleteCameraRecord(const QString& cameraId);
+    void updateCameraStatus(const QString& cameraId, const QString& status);
+    QUrl baseUrl() const { return serverUrl; }
 
 signals:
     void personsUpdated(const QList<PersonRecord>& persons);
@@ -196,6 +208,13 @@ signals:
     void embeddingUploadFailed(const QString& error);
     void avatarUploaded();
     void avatarUploadFailed(const QString& error);
+    void camerasUpdated(const QList<CameraRecord>& cameras);
+    void cameraSubmitted(const CameraRecord& camera);
+    void cameraSubmissionFailed(const QString& error);
+    void cameraDeleted(const QString& cameraId);
+    void cameraDeleteFailed(const QString& error);
+    void cameraUpdated(const CameraRecord& camera);
+    void cameraUpdateFailed(const QString& error);
 
 private slots:
     void handleLoginResult(const AuthResult& result);
@@ -219,6 +238,14 @@ private slots:
     void handleEmbeddingFailed(const QString& error);
     void handleAvatarUploaded();
     void handleAvatarUploadFailed(const QString& error);
+    void handleCamerasFetched(const QList<CameraRecord>& cameras);
+    void handleCamerasFetchFailed(const QString& error);
+    void handleCameraCreated(const CameraRecord& camera);
+    void handleCameraCreateFailed(const QString& error);
+    void handleCameraDeleted(const QString& cameraId);
+    void handleCameraDeleteFailed(const QString& error);
+    void handleCameraUpdated(const CameraRecord& camera);
+    void handleCameraUpdateFailed(const QString& error);
 
 private:
     struct QueuedEvent {
@@ -232,13 +259,18 @@ private:
     bool ensureAuthenticated();
     bool writeEmbeddingsFile(const QList<EmbeddingRecord>& embeddings, QString* errorOut = nullptr) const;
     PersonRecord personById(const QString& id) const;
+    QString cameraSourceForLocal(int cameraId) const;
+    QString cameraIdForStream(const QString& streamUrl) const;
+    QString cameraIdForLocal(int cameraId) const;
 
     SupabaseClient* client = nullptr;
     AIProcessor* aiProcessor = nullptr;
+    CameraManager* cameraManager = nullptr;
     QTimer syncTimer;
     QQueue<QueuedEvent> eventQueue;
     QList<PersonRecord> personsCache;
     QList<EmbeddingRecord> embeddingsCache;
+    QList<CameraRecord> camerasCache;
     QHash<QString, PersonRecord> personIndex;
     QHash<QString, PersonRecord> personsById;
 
@@ -253,6 +285,7 @@ private:
     bool personsRequestActive = false;
     bool eventRequestActive = false;
     bool embeddingsRequestActive = false;
+    bool camerasRequestActive = false;
     bool manualCredentialsProvided = false;
     const int maxEventQueueSize = 200;
     const int maxEventAttempts = 3;

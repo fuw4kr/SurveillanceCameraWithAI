@@ -62,7 +62,6 @@ MainWindow::MainWindow(QWidget* parent)
     qInfo() << "[MainWindow]" << "Constructing UI";
     setupUi();
     setupTitleBar();
-    setupSettingsPopup();
     setupSidebar();
     setupConsole();
     loadThemeStyles();
@@ -182,11 +181,8 @@ void MainWindow::setupUi()
         "?? Dashboard",
         "?? Live Cameras",
         "?? Face Database",
-        "?? Heatmap Analytics",
-        "?? Events / Logs",
         "?? 3D Face Viewer",
         "?? AI Analytics",
-        "?? System Console",
         "?? Settings"
         });
     listModes->setFixedWidth(220);
@@ -292,11 +288,12 @@ void MainWindow::setupUi()
 
     serverSync = new ServerSyncManager(this);
     serverSync->setAiProcessor(aiProcessor);
+    serverSync->setCameraManager(cameraManager);
 
-    camerasPage = new CamerasPage(cameraManager, aiProcessor, this);
-    analyticsPage = new AnalyticsPage(cameraManager, aiProcessor, this);
+    camerasPage = new CamerasPage(cameraManager, aiProcessor, serverSync, this);
     faceDbPage = new FaceDatabasePage(serverSync, this);
-    face3dPage = new Face3DViewerPage(aiProcessor, this);
+    face3dPage = new Face3DViewerPage(aiProcessor, serverSync, this);
+    analyticsPage = new AnalyticsPage(cameraManager, aiProcessor, this);
 
     settingsPage = new SettingsPage(modelsDirectory, this);
     connect(serverSync, &ServerSyncManager::personsUpdated, faceDbPage, &FaceDatabasePage::setRemotePersons);
@@ -314,11 +311,8 @@ void MainWindow::setupUi()
     stackedWidget->addWidget(dashboardPage);
     stackedWidget->addWidget(camerasPage);
     stackedWidget->addWidget(faceDbPage);
-    stackedWidget->addWidget(new QWidget); // Heatmap placeholder
-    stackedWidget->addWidget(new QWidget); // Events placeholder
     stackedWidget->addWidget(face3dPage);
     stackedWidget->addWidget(analyticsPage);
-    stackedWidget->addWidget(new QWidget);
     stackedWidget->addWidget(settingsPage);
 
     centerLayout->addWidget(listModes);
@@ -601,22 +595,13 @@ void MainWindow::updateMaximizeIcon(bool maxed)
  */
 void MainWindow::toggleSettingsPopup()
 {
-    if (!settingsPopup || !btnSettings)
+    if (!listModes || !stackedWidget || !settingsPage)
         return;
-
-    if (settingsPopup->isVisible()) {
-        settingsPopup->hide();
-        return;
+    const int settingsRow = listModes->count() - 1;
+    if (settingsRow >= 0) {
+        listModes->setCurrentRow(settingsRow);
+        stackedWidget->setCurrentWidget(settingsPage);
     }
-
-    refreshSettingsUi();
-    QSize popupSize = settingsPopup->sizeHint();
-    QPoint globalPos = btnSettings->mapToGlobal(QPoint(btnSettings->width() - popupSize.width(), btnSettings->height()));
-    globalPos.setX(std::max(0, globalPos.x()));
-    globalPos.setY(std::max(0, globalPos.y()));
-    settingsPopup->resize(popupSize);
-    settingsPopup->move(globalPos);
-    settingsPopup->show();
 }
 
 /**

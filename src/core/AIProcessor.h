@@ -15,6 +15,7 @@
  * ai.loadEmbedModel("assets/models/arcface.onnx");
  * auto frame = ai.processFrame(mat, 0);
  */
+#include "AIProcessorONNX.h"
 
 #include <QObject>
 #include <QVector>

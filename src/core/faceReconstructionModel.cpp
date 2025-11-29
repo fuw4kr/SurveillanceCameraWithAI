@@ -34,6 +34,16 @@ size_t safeProduct(const std::vector<T>& values)
     }
     return prod;
 }
+
+std::vector<int64_t> sanitizeShape(const std::vector<int64_t>& shape)
+{
+    std::vector<int64_t> result = shape;
+    for (auto& dim : result) {
+        if (dim <= 0)
+            dim = 1;
+    }
+    return result;
+}
 }
 
 FaceReconstructionModel::FaceReconstructionModel() = default;
@@ -62,7 +72,8 @@ bool FaceReconstructionModel::loadModel(const QString& modelPath)
             Ort::TypeInfo inputInfo = session->GetInputTypeInfo(0);
             auto tensorInfo = inputInfo.GetTensorTypeAndShapeInfo();
             inputShape = tensorInfo.GetShape();
-            inputTensorSize = safeProduct(inputShape);
+            inputRunShape = sanitizeShape(inputShape);
+            inputTensorSize = safeProduct(inputRunShape);
             if (inputShape.size() >= 4) {
                 inputChannels = static_cast<int>(std::max<int64_t>(1, inputShape[inputShape.size() - 3]));
                 inputHeight = static_cast<int>(std::max<int64_t>(1, inputShape[inputShape.size() - 2]));
@@ -131,20 +142,48 @@ QVector<QVector3D> FaceReconstructionModel::parseOutput(const std::vector<float>
     if (vertexCount == 0)
         return points;
 
+    size_t planarCount = 0;
+    if (outputShape.size() >= 3) {
+        const int64_t channels = outputShape[outputShape.size() - 2];
+        const int64_t count = outputShape.back();
+        if (channels == 3 && count > 0)
+            planarCount = static_cast<size_t>(count);
+    }
+    const size_t expectedPoints = planarCount > 0 ? planarCount : static_cast<size_t>(std::min<int64_t>(68, vertexCount));
+
     const bool interleaved = !outputShape.empty()
         && outputShape.back() == 3;
-    points.reserve(static_cast<int>(vertexCount));
+    const size_t stride = std::min({ expectedPoints, vertexCount, output.size() / 3 });
+    points.reserve(static_cast<int>(stride));
 
     if (interleaved) {
-        for (size_t i = 0; i + 2 < output.size(); i += 3)
-            points.append(QVector3D(output[i], output[i + 1], output[i + 2]));
+        for (size_t i = 0; i < stride; ++i) {
+            const size_t base = i * 3;
+            if (base + 2 >= output.size())
+                break;
+            points.append(QVector3D(output[base], output[base + 1], output[base + 2]));
+        }
     } else {
-        for (size_t i = 0; i < vertexCount; ++i) {
-            const float x = output[i];
-            const float y = (i + vertexCount < output.size()) ? output[i + vertexCount] : 0.0f;
-            const float z = (i + 2 * vertexCount < output.size()) ? output[i + 2 * vertexCount] : 0.0f;
+        const size_t xOffset = 0;
+        const size_t yOffset = stride;
+        const size_t zOffset = stride * 2;
+        for (size_t i = 0; i < stride; ++i) {
+            if (i + zOffset >= output.size())
+                break;
+            const float x = output[xOffset + i];
+            const float y = output[yOffset + i];
+            const float z = output[zOffset + i];
             points.append(QVector3D(x, y, z));
         }
+    }
+
+    if (!points.isEmpty()) {
+        QVector3D centroid;
+        for (const QVector3D& p : points)
+            centroid += p;
+        centroid /= static_cast<float>(points.size());
+        for (QVector3D& p : points)
+            p -= centroid;
     }
 
     return points;
@@ -178,8 +217,9 @@ QVector<QVector3D> FaceReconstructionModel::reconstruct(const cv::Mat& faceBgr, 
     QVector<QVector3D> result;
     try {
         QMutexLocker locker(&sessionMutex);
+        const std::vector<int64_t>& runShape = inputRunShape.empty() ? inputShape : inputRunShape;
         Ort::Value inputTensor = Ort::Value::CreateTensor<float>(memInfo, tensor.data(),
-            tensor.size(), inputShape.data(), inputShape.size());
+            tensor.size(), runShape.data(), runShape.size());
         auto output = session->Run(Ort::RunOptions{ nullptr }, inputNames.data(), &inputTensor, 1,
             outputNames.data(), 1);
         if (output.empty() || !output[0].IsTensor()) {
