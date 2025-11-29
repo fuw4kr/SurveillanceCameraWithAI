@@ -132,7 +132,11 @@ jobs:
           $buildDir = "${{ env.BUILD_DIR }}"
           $dist = "${{ env.DIST_DIR }}"
           $exeName = "${{ env.EXECUTABLE_NAME }}"
+          
+          # 1. Створюємо папку dist
           New-Item -ItemType Directory -Path $dist -Force | Out-Null
+
+          # 2. Знаходимо та копіюємо EXE (тут ваш старий код був ок)
           $candidatePaths = @(
             Join-Path $buildDir $exeName
             Join-Path (Join-Path $buildDir $env:BUILD_TYPE) $exeName
@@ -145,26 +149,40 @@ jobs:
               break
             }
           }
-          if (-not $exePath) {
-            Write-Host "::error::Executable not found. Listing build directory for debugging."
-            Get-ChildItem -Path $buildDir -Recurse
-            throw "Executable not found at expected locations."
-          }
+          if (-not $exePath) { throw "Executable not found." }
+          
           Copy-Item $exePath (Join-Path $dist $exeName) -Force
+          
+          # Отримуємо папку, де лежить exe (це корінь збірки)
+          $binDir = Split-Path $exePath -Parent
 
-          $dllSources = @(
-            Join-Path $buildDir "bin"
-            Join-Path $buildDir $env:BUILD_TYPE
-          ) | Where-Object { Test-Path $_ }
-          foreach ($dllSource in $dllSources) {
-            Get-ChildItem -Path $dllSource -Filter *.dll -File -ErrorAction SilentlyContinue | ForEach-Object {
-              Copy-Item $_.FullName -Destination $dist -Force
+          # 3. Копіюємо всі DLL поруч з exe
+          Get-ChildItem -Path $binDir -Filter *.dll | ForEach-Object {
+            Copy-Item $_.FullName -Destination $dist -Force
+          }
+
+          # 4. ВАЖЛИВО: Копіюємо папки плагінів Qt (platforms, tls, styles і т.д.)
+          # CMake створює їх поруч з exe, треба перенести в dist
+          $qtPlugins = @("platforms", "styles", "tls", "iconengines", "imageformats", "renderers")
+          foreach ($plugin in $qtPlugins) {
+            $srcPath = Join-Path $binDir $plugin
+            if (Test-Path $srcPath) {
+               Copy-Item -Path $srcPath -Destination $dist -Recurse -Force
             }
           }
 
+          # 5. ВАЖЛИВО: Копіюємо папку assets (моделі)
+          # Вона може бути в корені репозиторію або скопійована в build
+          $assetsSrc = "assets"
+          if (Test-Path $assetsSrc) {
+             Copy-Item -Path $assetsSrc -Destination $dist -Recurse -Force
+          }
+
+          # 6. Архівуємо
           $artifactName = "SurveillanceCameraWithAI-${{ env.VCPKG_TARGET_TRIPLET }}-${{ env.BUILD_TYPE }}"
           $zipPath = "$artifactName.zip"
           Compress-Archive -Path (Join-Path $dist '*') -DestinationPath $zipPath -Force
+          
           "ARTIFACT_NAME=$artifactName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "ARTIFACT_ZIP=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
