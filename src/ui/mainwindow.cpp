@@ -14,9 +14,18 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QProcessEnvironment>
 #include <QSignalBlocker>
 #include <QMetaObject>
 #include <QStringList>
+#include <QTimer>
+#include <QUrl>
 #include <QMessageBox>
 #include <algorithm>
 
@@ -32,6 +41,7 @@ MainWindow::MainWindow(QWidget* parent)
     loadThemeStyles();
     applyTheme(currentTheme);
     setupConnections();
+    setupDashboardPolling();
 
     setWindowTitle("AI Smart Surveillance System");
     resize(1200, 800);
@@ -134,6 +144,7 @@ void MainWindow::setupUi()
     stackedWidget = new QStackedWidget;
     stackedWidget->setObjectName("stackedWidget");
 
+    dashboardPage = new DashboardPage;
     modelsDirectory = QCoreApplication::applicationDirPath() + QStringLiteral("/assets/models");
     modelSettings = ModelSettings::load();
 
@@ -250,7 +261,7 @@ void MainWindow::setupUi()
     faceAlertController = new FaceAlertController(aiProcessor, serverSync, this, this);
     detectionEventController = new DetectionEventController(aiProcessor, serverSync, this);
 
-    stackedWidget->addWidget(dashboard);
+    stackedWidget->addWidget(dashboardPage);
     stackedWidget->addWidget(camerasPage);
     stackedWidget->addWidget(faceDbPage);
     stackedWidget->addWidget(new QWidget); // Heatmap placeholder
@@ -498,6 +509,111 @@ void MainWindow::refreshSettingsUi()
     }
 }
 
+// === Dashboard API ===
+void MainWindow::setupDashboardPolling()
+{
+    if (!networkManager)
+        networkManager = new QNetworkAccessManager(this);
+
+    if (!supabaseClient) {
+        supabaseClient = new SupabaseClient(this);
+        supabaseClient->setBaseUrl(apiBaseUrl);
+        connect(supabaseClient, &SupabaseClient::loginFinished, this, &MainWindow::handleAuthResult);
+    }
+
+    if (!dashboardTimer) {
+        dashboardTimer = new QTimer(this);
+        dashboardTimer->setInterval(dashboardRefreshIntervalMs);
+        connect(dashboardTimer, &QTimer::timeout, this, &MainWindow::fetchDashboard);
+        dashboardTimer->start();
+    }
+
+    refreshAuthToken();
+    fetchDashboard();
+}
+
+void MainWindow::fetchDashboard()
+{
+    if (dashboardRequestInFlight || !networkManager)
+        return;
+
+    if (authToken.isEmpty()) {
+        if (!authRefreshInFlight)
+            refreshAuthToken();
+        return;
+    }
+
+    QUrl url = apiBaseUrl.resolved(QUrl(QStringLiteral("/api/dashboard")));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setRawHeader("Authorization", QByteArray("Bearer ") + authToken.toUtf8());
+
+    QNetworkReply* reply = networkManager->get(request);
+    dashboardRequestInFlight = true;
+    connect(reply, &QNetworkReply::finished, this, &MainWindow::handleDashboardReply);
+}
+
+void MainWindow::handleDashboardReply()
+{
+    dashboardRequestInFlight = false;
+    QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply)
+        return;
+
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+    if (reply->error() != QNetworkReply::NoError) {
+        qWarning() << "Dashboard request failed:" << reply->errorString() << "code" << statusCode;
+        if (statusCode == 401 || statusCode == 403)
+            refreshAuthToken();
+        reply->deleteLater();
+        return;
+    }
+
+    const QJsonObject json = QJsonDocument::fromJson(reply->readAll()).object();
+    if (dashboardPage)
+        dashboardPage->applyDashboardData(json);
+
+    reply->deleteLater();
+}
+
+void MainWindow::refreshAuthToken()
+{
+    if (authRefreshInFlight)
+        return;
+
+    const QString envToken = qEnvironmentVariable("DASHBOARD_BEARER");
+    if (!envToken.isEmpty()) {
+        authToken = envToken;
+        return;
+    }
+
+    if (!supabaseClient) {
+        qWarning() << "Cannot refresh auth token: Supabase client not available";
+        return;
+    }
+
+    const QString email = qEnvironmentVariable("APP_EMAIL");
+    const QString password = qEnvironmentVariable("APP_PASSWORD");
+    if (email.isEmpty() || password.isEmpty()) {
+        qWarning() << "Auth token missing; set DASHBOARD_BEARER or APP_EMAIL/APP_PASSWORD to refresh automatically.";
+        return;
+    }
+
+    authRefreshInFlight = true;
+    supabaseClient->login(email, password);
+}
+
+void MainWindow::handleAuthResult(const AuthResult& result)
+{
+    authRefreshInFlight = false;
+    if (!result.success) {
+        qWarning() << "Auth refresh failed:" << result.message;
+        return;
+    }
+
+    authToken = result.token;
+    fetchDashboard();
 void MainWindow::onDetectionModelSelected(const QString& modelPath, const QString& configPath)
 {
     if (!loadDetectionModel(modelPath, configPath))
