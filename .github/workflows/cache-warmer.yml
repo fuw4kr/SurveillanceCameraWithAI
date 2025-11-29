@@ -8,7 +8,15 @@ permissions:
   actions: write
 
 env:
-  # Точний шлях до архіву vcpkg на Windows runners
+  BUILD_DIR: build
+  DIST_DIR: dist
+  EXECUTABLE_NAME: SurveillanceCameraWithAI.exe
+  BUILD_TYPE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_type || 'Release' }}
+  VCPKG_TARGET_TRIPLET: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.triplet || 'x64-windows' }}
+  RUN_TESTS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_tests || 'true' }}
+  PACKAGE_ARTIFACTS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.package_artifacts || 'true' }}
+  FORCE_PUBLISH_RELEASE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release || 'false' }}
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref_name }}
   ARCHIVE_PATH: "C:/Users/runneradmin/AppData/Local/vcpkg/archives"
 
 jobs:
