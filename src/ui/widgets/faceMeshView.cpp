@@ -1,3 +1,10 @@
+/**
+ * @file faceMeshView.cpp
+ * @brief Implements the Qt3D face mesh viewer with axes and orbit controls.
+ *
+ * Builds the 3D scene graph, normalizes landmark points for consistent scale,
+ * positions the camera automatically, and renders colored axes for orientation.
+ */
 #include "faceMeshView.h"
 
 #include <Qt3DCore/QEntity>
@@ -19,6 +26,16 @@
 #include <cmath>
 
 namespace {
+/**
+ * @brief Creates a colored axis cylinder aligned to the provided direction.
+ * @param parent Parent entity that will own the axis.
+ * @param direction Unit vector indicating axis direction.
+ * @param color Color for the axis material.
+ * @return Qt3DCore::QEntity* Newly created axis entity.
+ * @throws None
+ * @example
+ * auto* xAxis = createAxis(root, QVector3D(1,0,0), Qt::red);
+ */
 Qt3DCore::QEntity* createAxis(Qt3DCore::QEntity* parent, const QVector3D& direction, const QColor& color)
 {
     auto* axisEntity = new Qt3DCore::QEntity(parent);
