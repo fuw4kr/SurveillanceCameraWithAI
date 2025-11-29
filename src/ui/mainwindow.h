@@ -9,10 +9,10 @@
 #include "windowEdit/FramelessWindow.h"
 #include "pages/dashboardpage.h"
 #include "pages/CamerasPage.h"
-#include "pages/analyticsPage.h"
 #include "pages/face3dviewerpage.h"
 #include "pages/faceDatabasePage.h"
 #include "pages/settingsPage.h"
+#include "pages/analyticsPage.h"
 #include "../core/CameraManager.h"
 #include "../core/AIProcessor.h"
 #include "../core/modelSettings.h"
@@ -96,9 +96,9 @@ private:
     CameraManager* cameraManager = nullptr;
     AIProcessor* aiProcessor = nullptr;
     CamerasPage* camerasPage = nullptr;
-    AnalyticsPage* analyticsPage = nullptr;
     FaceDatabasePage* faceDbPage = nullptr;
     Face3DViewerPage* face3dPage = nullptr;
+    AnalyticsPage* analyticsPage = nullptr;
     SettingsPage* settingsPage = nullptr;
     ServerSyncManager* serverSync = nullptr;
     FaceAlertController* faceAlertController = nullptr;

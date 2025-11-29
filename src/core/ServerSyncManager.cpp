@@ -55,6 +55,10 @@ ServerSyncManager::ServerSyncManager(QObject* parent)
     connect(client, &SupabaseClient::embeddingPostFailed, this, &ServerSyncManager::handleEmbeddingFailed);
     connect(client, &SupabaseClient::avatarUploaded, this, &ServerSyncManager::handleAvatarUploaded);
     connect(client, &SupabaseClient::avatarUploadFailed, this, &ServerSyncManager::handleAvatarUploadFailed);
+    connect(client, &SupabaseClient::camerasFetched, this, &ServerSyncManager::handleCamerasFetched);
+    connect(client, &SupabaseClient::camerasFetchFailed, this, &ServerSyncManager::handleCamerasFetchFailed);
+    connect(client, &SupabaseClient::cameraCreated, this, &ServerSyncManager::handleCameraCreated);
+    connect(client, &SupabaseClient::cameraCreateFailed, this, &ServerSyncManager::handleCameraCreateFailed);
 
     syncTimer.setSingleShot(false);
     syncTimer.setInterval(syncIntervalMs);
@@ -114,6 +118,20 @@ QString ServerSyncManager::personIdForName(const QString& name) const
         return {};
     const QString key = name.toLower();
     return personIndex.contains(key) ? personIndex.value(key).id : QString();
+}
+
+void ServerSyncManager::submitCameraRecord(const QString& name, const QString& streamUrl, const QString& ipAddress, const QString& location)
+{
+    if (streamUrl.isEmpty()) {
+        emit errorMessage(tr("Camera stream URL is required."));
+        return;
+    }
+    if (!client->isAuthenticated() && !ensureAuthenticated())
+        return;
+    const QString label = name.isEmpty() ? streamUrl : name;
+    qInfo() << "[ServerSync]" << "Submitting camera record:" << label << streamUrl;
+    emit statusMessage(tr("Registering camera \"%1\"").arg(label));
+    client->createCamera(label, streamUrl, ipAddress, location);
 }
 
 void ServerSyncManager::sendDetectionStatus(const QString& personId, int cameraId, bool active, const QDateTime& timestamp)
@@ -281,6 +299,12 @@ void ServerSyncManager::requestImmediatePersonsRefresh()
     requestPersonsRefresh();
 }
 
+void ServerSyncManager::requestImmediateCamerasRefresh()
+{
+    camerasRequestActive = false;
+    requestCamerasRefresh();
+}
+
 void ServerSyncManager::handleLoginResult(const AuthResult& result)
 {
     loginInProgress = false;
@@ -292,6 +316,7 @@ void ServerSyncManager::handleLoginResult(const AuthResult& result)
     qInfo() << "[ServerSync]" << "Authenticated. Token expires at" << result.expiresAt.toString(Qt::ISODate);
     emit statusMessage(tr("Authenticated to %1").arg(serverUrl.host()));
     requestPersonsRefresh();
+    requestCamerasRefresh();
     flushEventQueue();
 }
 
@@ -349,6 +374,7 @@ void ServerSyncManager::handleSyncTick()
     if (!ensureAuthenticated())
         return;
     requestPersonsRefresh();
+    requestCamerasRefresh();
     flushEventQueue();
     qInfo() << "[ServerSync]" << "Manual sync executed";
 }
@@ -461,6 +487,35 @@ void ServerSyncManager::handleAvatarUploadFailed(const QString& error)
     emit avatarUploadFailed(error);
 }
 
+void ServerSyncManager::handleCamerasFetched(const QList<CameraRecord>& cameras)
+{
+    camerasRequestActive = false;
+    camerasCache = cameras;
+    emit camerasUpdated(cameras);
+    emit statusMessage(tr("Synced %1 camera records").arg(cameras.size()));
+    qInfo() << "[ServerSync]" << "Cameras sync completed:" << cameras.size();
+}
+
+void ServerSyncManager::handleCamerasFetchFailed(const QString& error)
+{
+    camerasRequestActive = false;
+    qWarning() << "[ServerSync]" << "Cameras fetch failed:" << error;
+    emit errorMessage(tr("Failed to fetch cameras: %1").arg(error));
+}
+
+void ServerSyncManager::handleCameraCreated(const CameraRecord& camera)
+{
+    qInfo() << "[ServerSync]" << "Camera created on server:" << camera.name << camera.streamUrl;
+    emit cameraSubmitted(camera);
+    requestCamerasRefresh();
+}
+
+void ServerSyncManager::handleCameraCreateFailed(const QString& error)
+{
+    qWarning() << "[ServerSync]" << "Camera submission failed:" << error;
+    emit cameraSubmissionFailed(error);
+}
+
 void ServerSyncManager::enqueueDetections(int cameraId, const QVector<Detection>& detections)
 {
     if (detections.isEmpty())
@@ -514,6 +569,16 @@ void ServerSyncManager::requestEmbeddingsRefresh()
         return;
     embeddingsRequestActive = true;
     client->fetchEmbeddings();
+}
+
+void ServerSyncManager::requestCamerasRefresh()
+{
+    if (camerasRequestActive)
+        return;
+    if (!client->isAuthenticated())
+        return;
+    camerasRequestActive = true;
+    client->fetchCameras();
 }
 
 bool ServerSyncManager::ensureAuthenticated()

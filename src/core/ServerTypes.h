@@ -38,10 +38,22 @@ struct EmbeddingRecord {
     QDateTime createdAt;
 };
 
+struct CameraRecord {
+    QString id;
+    QString name;
+    QString ipAddress;
+    QString location;
+    QString status;
+    QString streamUrl;
+    QDateTime createdAt;
+};
+
 Q_DECLARE_METATYPE(PersonRecord)
 Q_DECLARE_METATYPE(QList<PersonRecord>)
 Q_DECLARE_METATYPE(EventPayload)
 Q_DECLARE_METATYPE(EmbeddingRecord)
 Q_DECLARE_METATYPE(QList<EmbeddingRecord>)
+Q_DECLARE_METATYPE(CameraRecord)
+Q_DECLARE_METATYPE(QList<CameraRecord>)
 
 #endif // SERVERTYPES_H
