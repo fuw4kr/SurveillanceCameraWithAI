@@ -63,6 +63,7 @@ bool CameraManager::openCamera(int id, const QString& source)
         Qt::QueuedConnection);
 
     cameras.insert(id, stream);
+    qInfo() << "[CameraManager]" << "Camera" << id << "opened from source" << stream->resolvedSource;
     return true;
 }
 
@@ -84,6 +85,7 @@ void CameraManager::startCapture(int id)
 
     if (stream && stream->decoder)
         stream->decoder->start(source);
+    qInfo() << "[CameraManager]" << "Capture started for camera" << id;
 }
 
 void CameraManager::stopCapture(int id)
@@ -104,6 +106,7 @@ void CameraManager::stopCapture(int id)
         stream->decoder->stop();
     if (stream && stream->audioPlayer)
         stream->audioPlayer->stop();
+    qInfo() << "[CameraManager]" << "Capture stopped for camera" << id;
 }
 
 void CameraManager::closeCamera(int id)
@@ -126,6 +129,7 @@ void CameraManager::closeCamera(int id)
         stream->decoder->stop();
     if (stream->audioPlayer)
         stream->audioPlayer->stop();
+    qInfo() << "[CameraManager]" << "Camera" << id << "closed";
 }
 
 void CameraManager::closeAll()

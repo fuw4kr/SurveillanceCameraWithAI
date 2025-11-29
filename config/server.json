@@ -1,0 +1,6 @@
+{
+  "base_url": "https://myserver-tc2d.onrender.com",
+  "email": "admin@example.com",
+  "password": "change-me",
+  "sync_interval_ms": 5000
+}

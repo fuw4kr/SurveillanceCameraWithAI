@@ -1,11 +1,13 @@
 {
   "dependencies": [
+    "ffmpeg",
     "opencv4",
+    "qt3d",
     "qtbase",
     "qtcharts",
     "qtmultimedia",
     "qtsvg",
     "qttools",
-    "ffmpeg"
+    "openssl"
   ]
 }
