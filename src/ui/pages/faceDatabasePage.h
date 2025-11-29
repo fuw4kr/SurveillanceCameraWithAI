@@ -1,19 +1,21 @@
 #ifndef FACEDATABASEPAGE_H
 #define FACEDATABASEPAGE_H
 
-#include <QWidget>
-#include <QVector>
-#include <QString>
-#include <QStringList>
 #include <QPixmap>
 #include <QSize>
+#include <QString>
+#include <QStringList>
+#include <QVector>
+#include <QWidget>
 
 class QListWidget;
 class QListWidgetItem;
 class QLineEdit;
 class QPushButton;
 class QLabel;
+class QTableWidget;
 
+#include "../../core/ServerTypes.h"
 #include "../../core/AIProcessor.h"
 
 class FaceDatabasePage : public QWidget
@@ -21,6 +23,10 @@ class FaceDatabasePage : public QWidget
     Q_OBJECT
 public:
     explicit FaceDatabasePage(AIProcessor* processor, QWidget* parent = nullptr);
+    void setRemotePersons(const QList<PersonRecord>& persons);
+
+signals:
+    void requestCloudRefresh();
 
 private slots:
     void refreshProfiles();
@@ -45,10 +51,14 @@ private:
     QPushButton* deleteButton = nullptr;
     QPushButton* mergeButton = nullptr;
     QPushButton* refreshButton = nullptr;
+    QTableWidget* remotePersonsTable = nullptr;
+    QLabel* remoteStatusLabel = nullptr;
+    QPushButton* remoteRefreshButton = nullptr;
 
     QVector<AIProcessor::FaceProfile> cachedProfiles;
     QString currentFilter;
     bool updatingSelection = false;
+    QList<PersonRecord> remotePersons;
 
     QVector<AIProcessor::FaceProfile> fetchProfiles() const;
     void rebuildGallery();
@@ -58,6 +68,7 @@ private:
     void updateDetailPanel();
     QPixmap buildFacePixmap(const AIProcessor::FaceProfile& profile, const QSize& size) const;
     void setStatusMessage(const QString& text, bool isError = false);
+    void updateRemotePersonsTable();
 };
 
 #endif // FACEDATABASEPAGE_H

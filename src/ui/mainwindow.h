@@ -10,11 +10,13 @@
 #include "pages/dashboardpage.h"
 #include "pages/CamerasPage.h"
 #include "pages/analyticsPage.h"
+#include "pages/face3dviewerpage.h"
 #include "pages/faceDatabasePage.h"
 #include "pages/settingsPage.h"
 #include "../core/CameraManager.h"
 #include "../core/AIProcessor.h"
 #include "../core/modelSettings.h"
+#include "../core/SupabaseClient.h"
 #include <QWidget>
 #include <QMainWindow>
 #include <QListWidget>
@@ -30,6 +32,8 @@
 #include <QThread>
 #include <QMetaObject>
 
+class ServerSyncManager;
+
 class MainWindow : public FramelessWindow
 {
     Q_OBJECT
@@ -37,6 +41,7 @@ class MainWindow : public FramelessWindow
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow();
+    void initializeServerSync(const LoginSession& session);
 
 private slots:
     void onModeChanged(int index);
@@ -46,6 +51,8 @@ private slots:
     void handleGpuToggle(bool checked);
     void onDetectionModelSelected(const QString& modelPath, const QString& configPath);
     void onEmbeddingModelSelected(const QString& modelPath);
+    void handleServerStatus(const QString& status);
+    void handleServerError(const QString& error);
 
 private:
     // === UI elements ===
@@ -74,7 +81,9 @@ private:
     CamerasPage* camerasPage = nullptr;
     AnalyticsPage* analyticsPage = nullptr;
     FaceDatabasePage* faceDbPage = nullptr;
+    Face3DViewerPage* face3dPage = nullptr;
     SettingsPage* settingsPage = nullptr;
+    ServerSyncManager* serverSync = nullptr;
     QString embedModelPath;
     QThread* aiThread = nullptr;
     int cachedRecognitionInterval = 500;

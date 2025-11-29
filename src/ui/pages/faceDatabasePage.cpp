@@ -8,6 +8,8 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QFrame>
+#include <QGroupBox>
+#include <QHeaderView>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
@@ -17,6 +19,7 @@
 #include <QIcon>
 #include <QDebug>
 #include <QImage>
+#include <QTableWidget>
 #include <algorithm>
 
 namespace {
@@ -137,6 +140,33 @@ FaceDatabasePage::FaceDatabasePage(AIProcessor* processor, QWidget* parent)
     contentLayout->addWidget(detailPanel, 1);
     mainLayout->addLayout(contentLayout, 1);
 
+    QGroupBox* cloudGroup = new QGroupBox(tr("Cloud Directory (remote persons)"), this);
+    QVBoxLayout* cloudLayout = new QVBoxLayout(cloudGroup);
+    cloudLayout->setContentsMargins(12, 12, 12, 12);
+    cloudLayout->setSpacing(8);
+
+    QHBoxLayout* cloudToolbar = new QHBoxLayout;
+    cloudToolbar->setSpacing(8);
+    remoteStatusLabel = new QLabel(tr("Waiting for sync..."), cloudGroup);
+    remoteRefreshButton = new QPushButton(tr("Reload"), cloudGroup);
+    cloudToolbar->addWidget(remoteStatusLabel, 1);
+    cloudToolbar->addWidget(remoteRefreshButton, 0, Qt::AlignRight);
+    cloudLayout->addLayout(cloudToolbar);
+
+    remotePersonsTable = new QTableWidget(0, 5, cloudGroup);
+    QStringList remoteHeaders = { tr("Name"), tr("Role"), tr("Authorized"), tr("Last Seen"), tr("Registered") };
+    remotePersonsTable->setHorizontalHeaderLabels(remoteHeaders);
+    remotePersonsTable->horizontalHeader()->setStretchLastSection(true);
+    remotePersonsTable->verticalHeader()->hide();
+    remotePersonsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    remotePersonsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    remotePersonsTable->setAlternatingRowColors(true);
+    remotePersonsTable->setStyleSheet(QStringLiteral(
+        "QTableWidget { background:#0f172a; border:1px solid #1f2937; border-radius:10px; }"
+        "QHeaderView::section { background:#1e293b; color:#e2e8f0; border:none; }"));
+    cloudLayout->addWidget(remotePersonsTable);
+    mainLayout->addWidget(cloudGroup);
+
     if (aiProcessor) {
         connect(aiProcessor, &AIProcessor::faceDatabaseChanged,
             this, &FaceDatabasePage::handleFaceDatabaseChanged, Qt::QueuedConnection);
@@ -149,6 +179,7 @@ FaceDatabasePage::FaceDatabasePage(AIProcessor* processor, QWidget* parent)
     connect(deleteButton, &QPushButton::clicked, this, &FaceDatabasePage::handleDelete);
     connect(mergeButton, &QPushButton::clicked, this, &FaceDatabasePage::handleMerge);
     connect(nameEdit, &QLineEdit::textChanged, this, &FaceDatabasePage::handleNameEdited);
+    connect(remoteRefreshButton, &QPushButton::clicked, this, &FaceDatabasePage::requestCloudRefresh);
 
     renameButton->setEnabled(false);
     deleteButton->setEnabled(false);
@@ -156,6 +187,13 @@ FaceDatabasePage::FaceDatabasePage(AIProcessor* processor, QWidget* parent)
     setStatusMessage(QString());
 
     refreshProfiles();
+}
+
+void FaceDatabasePage::setRemotePersons(const QList<PersonRecord>& persons)
+{
+    remotePersons = persons;
+    updateRemotePersonsTable();
+    qInfo() << "[FaceDatabase]" << "Remote directory updated:" << remotePersons.size() << "records";
 }
 
 QVector<AIProcessor::FaceProfile> FaceDatabasePage::fetchProfiles() const
@@ -184,6 +222,7 @@ void FaceDatabasePage::refreshProfiles()
         setStatusMessage(tr("Loaded %1 face profiles").arg(cachedProfiles.size()));
     else
         setStatusMessage(tr("No enrolled faces yet. They'll appear here automatically."));
+    qInfo() << "[FaceDatabase]" << "Reloaded local profiles:" << cachedProfiles.size();
 }
 
 void FaceDatabasePage::rebuildGallery()
@@ -366,6 +405,7 @@ void FaceDatabasePage::handleRename()
 
     setStatusMessage(tr("Saved \"%1\"").arg(newName));
     refreshProfiles();
+    qInfo() << "[FaceDatabase]" << "Profile" << id << "renamed to" << newName;
 }
 
 void FaceDatabasePage::handleDelete()
@@ -398,6 +438,7 @@ void FaceDatabasePage::handleDelete()
         setStatusMessage(tr("Deleted %1 profile(s)").arg(ids.size()));
     else
         setStatusMessage(tr("Some entries could not be deleted"), true);
+    qInfo() << "[FaceDatabase]" << "Delete requested for" << ids.size() << "profile(s). success=" << allOk;
 }
 
 void FaceDatabasePage::handleMerge()
@@ -437,6 +478,7 @@ void FaceDatabasePage::handleMerge()
 
     setStatusMessage(tr("Merged %1 faces into \"%2\"").arg(ids.size()).arg(primaryProfile.name));
     refreshProfiles();
+    qInfo() << "[FaceDatabase]" << "Merged" << ids.size() << "profiles into" << primaryProfile.name;
 }
 
 void FaceDatabasePage::handleNameEdited(const QString&)
@@ -461,4 +503,35 @@ void FaceDatabasePage::setStatusMessage(const QString& text, bool isError)
                                            : "color:#a7f3d0; font-size:12px;");
         statusLabel->setText(text);
     }
+}
+
+void FaceDatabasePage::updateRemotePersonsTable()
+{
+    if (!remotePersonsTable)
+        return;
+    remotePersonsTable->setRowCount(remotePersons.size());
+    const QString yesText = tr("Yes");
+    const QString noText = tr("No");
+
+    for (int row = 0; row < remotePersons.size(); ++row) {
+        const auto& person = remotePersons.at(row);
+        auto setItem = [&](int column, const QString& value) {
+            auto* item = new QTableWidgetItem(value);
+            remotePersonsTable->setItem(row, column, item);
+        };
+        setItem(0, person.name.isEmpty() ? tr("Unnamed") : person.name);
+        setItem(1, person.role.isEmpty() ? tr("Unknown") : person.role);
+        setItem(2, person.authorized ? yesText : noText);
+        const QString lastSeen = person.lastSeen.isValid()
+            ? person.lastSeen.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))
+            : tr("Never");
+        setItem(3, lastSeen);
+        const QString registered = person.registeredAt.isValid()
+            ? person.registeredAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"))
+            : QString();
+        setItem(4, registered);
+    }
+
+    if (remoteStatusLabel)
+        remoteStatusLabel->setText(tr("Cloud persons: %1").arg(remotePersons.size()));
 }

@@ -19,7 +19,7 @@ endif()
 find_package(OpenCV REQUIRED)
 
 
-find_package(Qt6 COMPONENTS Widgets Charts Network OpenGL Multimedia Svg Concurrent REQUIRED)
+find_package(Qt6 COMPONENTS Widgets Charts Network OpenGL Multimedia Svg Concurrent 3DCore 3DExtras 3DInput 3DRender REQUIRED)
 
 find_package(FFMPEG REQUIRED)
 include_directories(${FFMPEG_INCLUDE_DIRS})
@@ -149,42 +149,57 @@ endif()
 set(SOURCES
     src/main.cpp
     src/ui/mainwindow.cpp
+    src/ui/loginwindow.cpp
     src/ui/windowEdit/framelessWindow.cpp
     src/ui/windowEdit/snapPreviewWindow.cpp
     src/ui/pages/dashboardpage.cpp
     src/ui/pages/camerasPage.cpp
     src/ui/pages/analyticsPage.cpp
     src/ui/pages/faceDatabasePage.cpp
+    src/ui/pages/face3dviewerpage.cpp
     src/ui/pages/settingsPage.cpp
     src/ui/widgets/cameraViewWidget.cpp
+    src/ui/widgets/faceMeshView.cpp
 
     
     src/core/cameraManager.cpp
     src/core/AIProcessor.cpp
     src/core/AIProcessorONNX.cpp
+    src/core/faceReconstructionModel.cpp
     src/core/audioStreamPlayer.cpp
     src/core/FFVideoDecoder.cpp
     src/core/modelSettings.cpp
+    src/core/SupabaseClient.cpp
+    src/core/ServerSyncManager.cpp
+    src/core/AppLogger.cpp
 
 )
 
 set(HEADERS
     src/ui/mainwindow.h
+    src/ui/loginwindow.h
     src/ui/windowEdit/framelessWindow.h
     src/ui/windowEdit/snapPreviewWindow.h
     src/ui/pages/dashboardpage.h
     src/ui/pages/camerasPage.h
     src/ui/pages/analyticsPage.h
     src/ui/pages/faceDatabasePage.h
+    src/ui/pages/face3dviewerpage.h
     src/ui/pages/settingsPage.h
     
     src/core/cameraManager.h
     src/core/AIProcessor.h
     src/core/AIProcessorONNX.h
+    src/core/faceReconstructionModel.h
     src/core/audioStreamPlayer.h
     src/core/FFVideoDecoder.h
     src/core/modelSettings.h
+    src/core/SupabaseClient.h
+    src/core/ServerSyncManager.h
+    src/core/ServerTypes.h
+    src/core/AppLogger.h
     src/ui/widgets/cameraViewWidget.h
+    src/ui/widgets/faceMeshView.h
 )
 
 # ======================================================
@@ -232,11 +247,42 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Network
     Qt6::OpenGL
     Qt6::Charts
+    Qt6::3DCore
+    Qt6::3DExtras
+    Qt6::3DInput
+    Qt6::3DRender
     ${OpenCV_LIBS}
     ${FFMPEG_LIBRARIES}
     ${ONNX_RUNTIME_TARGET}
 )
 
+set(_qt_triplet "${VCPKG_TARGET_TRIPLET}")
+if (NOT _qt_triplet OR _qt_triplet STREQUAL "")
+    set(_qt_triplet "x64-windows")
+endif()
+set(_qt_root "${CMAKE_BINARY_DIR}/vcpkg_installed/${_qt_triplet}")
+set(_qt_bin_release "${_qt_root}/bin")
+set(_qt_bin_debug "${_qt_root}/debug/bin")
+if (NOT EXISTS "${_qt_bin_debug}")
+    set(_qt_bin_debug "${_qt_bin_release}")
+endif()
+set(_qt_plugins_release "${_qt_root}/Qt6/plugins")
+set(_qt_plugins_debug "${_qt_root}/Qt6/debug/plugins")
+if (NOT EXISTS "${_qt_plugins_debug}")
+    set(_qt_plugins_debug "${_qt_plugins_release}")
+endif()
+set(_qt_tls_plugin "$<IF:$<CONFIG:Debug>,${_qt_plugins_debug}/tls/qopensslbackend.dll,${_qt_plugins_release}/tls/qopensslbackend.dll>")
+set(_qt_ssl_lib "$<IF:$<CONFIG:Debug>,${_qt_bin_debug}/libssl-3-x64.dll,${_qt_bin_release}/libssl-3-x64.dll>")
+set(_qt_crypto_lib "$<IF:$<CONFIG:Debug>,${_qt_bin_debug}/libcrypto-3-x64.dll,${_qt_bin_release}/libcrypto-3-x64.dll>")
+set(_qt_renderer_plugin "$<IF:$<CONFIG:Debug>,${_qt_plugins_debug}/renderers/openglrenderer.dll,${_qt_plugins_release}/renderers/openglrenderer.dll>")
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>/tls"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>/renderers"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_qt_tls_plugin}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/tls/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_qt_ssl_lib}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_qt_crypto_lib}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_qt_renderer_plugin}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/renderers/"
+    COMMENT "Deploying Qt TLS + OpenGL renderer runtime dependencies")
 # ======================================================
 # === Інформаційний вивід
 # ======================================================

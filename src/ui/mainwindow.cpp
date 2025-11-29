@@ -4,6 +4,7 @@
  */
 
 #include "MainWindow.h"
+#include "../core/ServerSyncManager.h"
 #include <QApplication>
 #include <QDebug>
 #include <QIcon>
@@ -19,6 +20,7 @@
 MainWindow::MainWindow(QWidget* parent)
     : FramelessWindow(parent)
 {
+    qInfo() << "[MainWindow]" << "Constructing UI";
     setupUi();
     setupTitleBar();
     setupSettingsPopup();
@@ -147,8 +149,8 @@ void MainWindow::setupUi()
     };
 
     QStringList detectionCandidates;
-    appendCandidates(detectionCandidates, "/assets/models/face_detection_yunet_2023mar.onnx");
     appendCandidates(detectionCandidates, "/assets/models/scrfd_2.5g_bnkps.onnx");
+    appendCandidates(detectionCandidates, "/assets/models/face_detection_yunet_2023mar.onnx");
     appendCandidates(detectionCandidates, "/assets/models/buffalo_s/det_500m.onnx");
     appendCandidates(detectionCandidates, "/assets/models/det_500m.onnx");
     appendCandidates(detectionCandidates, "/assets/models/res10_300x300_ssd_iter_140000.caffemodel");
@@ -213,15 +215,27 @@ void MainWindow::setupUi()
     camerasPage = new CamerasPage(cameraManager, aiProcessor, this);
     analyticsPage = new AnalyticsPage(cameraManager, aiProcessor, this);
     faceDbPage = new FaceDatabasePage(aiProcessor, this);
+    face3dPage = new Face3DViewerPage(aiProcessor, this);
 
     settingsPage = new SettingsPage(modelsDirectory, this);
 
+    serverSync = new ServerSyncManager(this);
+    serverSync->setAiProcessor(aiProcessor);
+    connect(serverSync, &ServerSyncManager::personsUpdated, faceDbPage, &FaceDatabasePage::setRemotePersons);
+    connect(serverSync, &ServerSyncManager::statusMessage, this, &MainWindow::handleServerStatus);
+    connect(serverSync, &ServerSyncManager::errorMessage, this, &MainWindow::handleServerError);
+    if (faceDbPage) {
+        connect(faceDbPage, &FaceDatabasePage::requestCloudRefresh, this, [this]() {
+            if (serverSync)
+                serverSync->requestImmediatePersonsRefresh();
+        });
+    }
     stackedWidget->addWidget(dashboard);
     stackedWidget->addWidget(camerasPage);
     stackedWidget->addWidget(faceDbPage);
-    stackedWidget->addWidget(new QWidget);
-    stackedWidget->addWidget(new QWidget);
-    stackedWidget->addWidget(new QWidget);
+    stackedWidget->addWidget(new QWidget); // Heatmap placeholder
+    stackedWidget->addWidget(new QWidget); // Events placeholder
+    stackedWidget->addWidget(face3dPage);
     stackedWidget->addWidget(analyticsPage);
     stackedWidget->addWidget(new QWidget);
     stackedWidget->addWidget(settingsPage);
@@ -547,4 +561,26 @@ void MainWindow::updateModelInfoLabel()
         tr("Det: %1 | Emb: %2")
             .arg(toLabel(currentDetectionModel),
                 toLabel(currentEmbeddingModel)));
+}
+
+void MainWindow::handleServerStatus(const QString& status)
+{
+    qInfo() << "[Server]" << status;
+}
+
+void MainWindow::handleServerError(const QString& error)
+{
+    qWarning() << "[Server]" << error;
+}
+
+void MainWindow::initializeServerSync(const LoginSession& session)
+{
+    if (!serverSync)
+        return;
+    if (!session.email.isEmpty() || !session.password.isEmpty())
+        serverSync->setCredentials(session.email, session.password);
+    if (session.auth.success && !session.auth.token.isEmpty())
+        serverSync->applySessionToken(session.auth.token, session.auth.expiresAt);
+    serverSync->start();
+    qInfo() << "[MainWindow]" << "Server synchronization initialized";
 }

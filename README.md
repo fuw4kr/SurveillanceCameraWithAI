@@ -123,4 +123,38 @@ QSS — підключається в main.cpp або в MainWindow.
 - OpenVINO GPU inference is enabled on Windows by default. Override the target with the AIP_OPENVINO_DEVICE env variable (e.g., GPU_FP16, GPU_FP32, CPU_FP32).
 - Set AIP_DISABLE_OPENVINO=1 to force the CPU path if the Intel GPU drivers or OpenVINO runtime are unavailable.
 
+## Remote server sync
+
+The desktop client now authenticates against `https://myserver-tc2d.onrender.com` via `/auth/login`, fetches `/api/persons`, and pushes detection summaries to `/api/events` roughly every 5 seconds.
+
+At startup the app shows a dedicated login dialog. The credentials entered there are used both for the immediate `/auth/login` call (to obtain a bearer token) and for the background `ServerSyncManager`, so you no longer have to bake secrets into the repository.
+
+Configure credentials and the polling cadence in `config/server.json`:
+
+```json
+{
+  "base_url": "https://myserver-tc2d.onrender.com",
+  "email": "admin@example.com",
+  "password": "change-me",
+  "sync_interval_ms": 5000
+}
+```
+
+To keep secrets out of source control, set environment variables instead of touching the JSON:
+
+| Env variable      | Purpose                                |
+| ----------------- | -------------------------------------- |
+| `SURV_SERVER_URL` | Overrides the API base URL             |
+| `SURV_EMAIL`      | Login email for `/auth/login`          |
+| `SURV_PASSWORD`   | Login password                         |
+| `SURV_SYNC_MS`    | Poll/sync interval (milliseconds)      |
+
+The face database page shows the remote persons table alongside the local embeddings, and the “Reload” button triggers an immediate `/api/persons` fetch. Detection events emitted by `AIProcessor` are queued and POSTed upstream with automatic retries so the backend continues receiving updates, even if frames arrive faster than the network allows.
+
+## Diagnostics & logging
+
+- The app now installs a global Qt message handler that writes every `qInfo/qWarning/qCritical` entry to both the console and timestamped files under `logs/` (next to the executable).  
+- Each subsystem (`LoginWindow`, `SupabaseClient`, `ServerSyncManager`, camera manager, face DB, etc.) emits structured log lines like `[ServerSync] Event delivered: ...` so you can trace failures even on headless deployments.  
+- To inspect the most recent run, open the newest `logs/app_*.log`.
+
 
