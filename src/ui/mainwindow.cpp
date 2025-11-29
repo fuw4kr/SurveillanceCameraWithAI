@@ -38,7 +38,174 @@
 #include <QTimer>
 #include <QUrl>
 #include <QMessageBox>
+#include <QDateTime>
 #include <algorithm>
+
+namespace {
+
+QJsonObject extractSummaryObject(const QJsonDocument& doc)
+{
+    if (!doc.isObject())
+        return {};
+
+    const QJsonObject root = doc.object();
+    const QJsonObject data = root.value(QStringLiteral("data")).toObject();
+    if (!data.isEmpty())
+        return data;
+    return root;
+}
+
+QList<int> parseHourlyDetections(const QJsonDocument& doc)
+{
+    QList<int> result(24, 0);
+    QJsonArray arr;
+    if (doc.isArray()) {
+        arr = doc.array();
+    } else {
+        const QJsonObject obj = doc.object();
+        arr = obj.value(QStringLiteral("detections")).toArray();
+        if (arr.isEmpty())
+            arr = obj.value(QStringLiteral("data")).toArray();
+        if (arr.isEmpty())
+            arr = obj.value(QStringLiteral("hours")).toArray();
+        if (arr.isEmpty())
+            arr = obj.value(QStringLiteral("items")).toArray();
+    }
+
+    if (arr.isEmpty())
+        return result;
+
+    if (arr.size() == result.size()) {
+        bool allNumbers = true;
+        for (const auto& v : arr) {
+            if (!v.isDouble()) {
+                allNumbers = false;
+                break;
+            }
+        }
+        if (allNumbers) {
+            for (int i = 0; i < arr.size(); ++i)
+                result[i] = arr.at(i).toInt();
+            return result;
+        }
+    }
+
+    bool anyData = false;
+    int idx = 0;
+    for (const auto& v : arr) {
+        if (v.isDouble()) {
+            if (idx < result.size())
+                result[idx] = v.toInt();
+            ++idx;
+            anyData = true;
+        } else if (v.isObject()) {
+            const QJsonObject obj = v.toObject();
+            const int hour = obj.value(QStringLiteral("hour")).toInt(
+                obj.value(QStringLiteral("h")).toInt(obj.value(QStringLiteral("id")).toInt(-1)));
+            const int count = obj.value(QStringLiteral("count")).toInt(
+                obj.value(QStringLiteral("detections")).toInt(
+                    obj.value(QStringLiteral("total")).toInt(obj.value(QStringLiteral("value")).toInt(0))));
+            if (hour >= 0 && hour < result.size()) {
+                result[hour] = count;
+                anyData = true;
+            }
+        }
+    }
+
+    if (!anyData)
+        result.fill(0);
+
+    return result;
+}
+
+QString toTimeString(const QJsonValue& value)
+{
+    if (value.isString())
+        return value.toString();
+
+    if (value.isDouble()) {
+        const double raw = value.toDouble();
+        const qint64 epochMs = raw > 4000000000.0 ? static_cast<qint64>(raw) : static_cast<qint64>(raw * 1000.0);
+        QDateTime dt = QDateTime::fromMSecsSinceEpoch(epochMs, Qt::UTC);
+        if (dt.isValid())
+            return dt.toLocalTime().toString(Qt::ISODate);
+    }
+    return {};
+}
+
+QJsonArray normalizeEvents(const QJsonDocument& doc)
+{
+    QJsonArray source;
+    if (doc.isArray()) {
+        source = doc.array();
+    } else {
+        const QJsonObject obj = doc.object();
+        source = obj.value(QStringLiteral("events")).toArray();
+        if (source.isEmpty())
+            source = obj.value(QStringLiteral("data")).toArray();
+        if (source.isEmpty())
+            source = obj.value(QStringLiteral("items")).toArray();
+    }
+
+    QJsonArray normalized;
+    for (const auto& entry : source) {
+        const QJsonObject obj = entry.toObject();
+        if (obj.isEmpty())
+            continue;
+
+        QString time = toTimeString(obj.value(QStringLiteral("time")));
+        if (time.isEmpty())
+            time = toTimeString(obj.value(QStringLiteral("timestamp")));
+        if (time.isEmpty())
+            time = toTimeString(obj.value(QStringLiteral("created_at")));
+        if (time.isEmpty())
+            time = toTimeString(obj.value(QStringLiteral("createdAt")));
+
+        QString label = obj.value(QStringLiteral("label")).toString();
+        if (label.isEmpty())
+            label = obj.value(QStringLiteral("type")).toString();
+        if (label.isEmpty())
+            label = obj.value(QStringLiteral("event")).toString();
+        if (label.isEmpty())
+            label = obj.value(QStringLiteral("title")).toString();
+        if (label.isEmpty())
+            label = obj.value(QStringLiteral("category")).toString();
+        if (label.isEmpty())
+            label = obj.value(QStringLiteral("status")).toString();
+
+        QString camera = obj.value(QStringLiteral("camera")).toString();
+        if (camera.isEmpty())
+            camera = obj.value(QStringLiteral("camera_name")).toString();
+        if (camera.isEmpty())
+            camera = obj.value(QStringLiteral("cameraName")).toString();
+        if (camera.isEmpty())
+            camera = obj.value(QStringLiteral("source")).toString();
+        if (camera.isEmpty())
+            camera = obj.value(QStringLiteral("device")).toString();
+        if (camera.isEmpty()) {
+            const QJsonValue camId = obj.contains(QStringLiteral("cameraId")) ? obj.value(QStringLiteral("cameraId")) : obj.value(QStringLiteral("camera_id"));
+            if (camId.isDouble())
+                camera = QString::number(camId.toInt());
+            else
+                camera = camId.toString();
+        }
+
+        QJsonObject normalizedEvent;
+        if (!time.isEmpty())
+            normalizedEvent.insert(QStringLiteral("time"), time);
+        if (!label.isEmpty())
+            normalizedEvent.insert(QStringLiteral("label"), label);
+        if (!camera.isEmpty())
+            normalizedEvent.insert(QStringLiteral("camera"), camera);
+
+        if (!normalizedEvent.isEmpty())
+            normalized.append(normalizedEvent);
+    }
+
+    return normalized;
+}
+
+} // namespace
 
 /**
  * @brief Constructs the main window, assembles UI pages, and primes background services.
@@ -727,14 +894,25 @@ void MainWindow::fetchDashboard()
         return;
     }
 
-    QUrl url = apiBaseUrl.resolved(QUrl(QStringLiteral("/api/dashboard")));
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Authorization", QByteArray("Bearer ") + authToken.toUtf8());
-
-    QNetworkReply* reply = networkManager->get(request);
     dashboardRequestInFlight = true;
-    connect(reply, &QNetworkReply::finished, this, &MainWindow::handleDashboardReply);
+    dashboardState.reset();
+    pendingDashboardRequests = 0;
+
+    const auto issueRequest = [this](const QString& path, const QString& key) {
+        QUrl url = apiBaseUrl.resolved(QUrl(path));
+        QNetworkRequest request(url);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+        request.setRawHeader("Authorization", QByteArray("Bearer ") + authToken.toUtf8());
+
+        QNetworkReply* reply = networkManager->get(request);
+        reply->setProperty("dashboardKey", key);
+        ++pendingDashboardRequests;
+        connect(reply, &QNetworkReply::finished, this, &MainWindow::handleDashboardReply);
+    };
+
+    issueRequest(QStringLiteral("/api/stats/summary"), QStringLiteral("summary"));
+    issueRequest(QStringLiteral("/api/stats/detections-by-hour"), QStringLiteral("detections_by_hour"));
+    issueRequest(QStringLiteral("/api/stats/events"), QStringLiteral("events"));
 }
 
 /**
@@ -749,26 +927,163 @@ void MainWindow::fetchDashboard()
  */
 void MainWindow::handleDashboardReply()
 {
-    dashboardRequestInFlight = false;
     QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
     if (!reply)
         return;
 
+    const QString key = reply->property("dashboardKey").toString();
     const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 
-    if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "Dashboard request failed:" << reply->errorString() << "code" << statusCode;
-        if (statusCode == 401 || statusCode == 403)
+    auto finalize = [this]() {
+        pendingDashboardRequests = std::max(0, pendingDashboardRequests - 1);
+        if (pendingDashboardRequests == 0) {
+            dashboardRequestInFlight = false;
+            if (dashboardState.ready() && dashboardPage) {
+                const QJsonObject payload = composeDashboardPayload();
+                dashboardPage->applyDashboardData(payload);
+                lastDashboardFetch = QDateTime::currentDateTime();
+                qInfo() << "[Dashboard]" << "Refreshed"
+                        << lastDashboardFetch.toString(Qt::ISODate)
+                        << "cameras" << payload.value(QStringLiteral("cameras")).toInt()
+                        << "detections" << payload.value(QStringLiteral("detections")).toInt()
+                        << "alerts" << payload.value(QStringLiteral("alerts")).toInt();
+            }
+        }
+    };
+
+    if (reply->error() != QNetworkReply::NoError || statusCode >= 400) {
+        qWarning() << "Dashboard request" << key << "failed:" << reply->errorString() << "code" << statusCode;
+        if (statusCode == 401 || statusCode == 403) {
             refreshAuthToken();
+        } else if (key == QStringLiteral("summary")) {
+            dashboardState.summary = QJsonObject();
+            dashboardState.hasSummary = true;
+        } else if (key == QStringLiteral("detections_by_hour")) {
+            dashboardState.hourlyDetections = QList<int>(24, 0);
+            dashboardState.hasHourlyDetections = true;
+        } else if (key == QStringLiteral("events")) {
+            dashboardState.events = QJsonArray();
+            dashboardState.hasEvents = true;
+        }
         reply->deleteLater();
+        finalize();
         return;
     }
 
-    const QJsonObject json = QJsonDocument::fromJson(reply->readAll()).object();
-    if (dashboardPage)
-        dashboardPage->applyDashboardData(json);
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qWarning() << "Dashboard response parse error for" << key << ":" << parseError.errorString();
+        if (key == QStringLiteral("summary")) {
+            dashboardState.summary = QJsonObject();
+            dashboardState.hasSummary = true;
+        } else if (key == QStringLiteral("detections_by_hour")) {
+            dashboardState.hourlyDetections = QList<int>(24, 0);
+            dashboardState.hasHourlyDetections = true;
+        } else if (key == QStringLiteral("events")) {
+            dashboardState.events = QJsonArray();
+            dashboardState.hasEvents = true;
+        }
+        reply->deleteLater();
+        finalize();
+        return;
+    }
+
+    if (key == QStringLiteral("summary")) {
+        dashboardState.summary = extractSummaryObject(doc);
+        dashboardState.hasSummary = true;
+    } else if (key == QStringLiteral("detections_by_hour")) {
+        dashboardState.hourlyDetections = parseHourlyDetections(doc);
+        dashboardState.hasHourlyDetections = true;
+    } else if (key == QStringLiteral("events")) {
+        dashboardState.events = normalizeEvents(doc);
+        dashboardState.hasEvents = true;
+    }
 
     reply->deleteLater();
+    finalize();
+}
+
+QJsonObject MainWindow::composeDashboardPayload() const
+{
+    QJsonObject payload = dashboardState.summary;
+
+    const auto pickInt = [](const QJsonObject& obj, const QStringList& keys, int fallback) {
+        for (const QString& key : keys) {
+            if (!obj.contains(key))
+                continue;
+            const QJsonValue v = obj.value(key);
+            if (v.isDouble())
+                return v.toInt();
+            if (v.isString()) {
+                bool ok = false;
+                const int parsed = v.toString().toInt(&ok);
+                if (ok)
+                    return parsed;
+            }
+        }
+        return fallback;
+    };
+
+    const auto pickBool = [](const QJsonObject& obj, const QStringList& keys, bool fallback) {
+        for (const QString& key : keys) {
+            if (!obj.contains(key))
+                continue;
+            const QJsonValue v = obj.value(key);
+            if (v.isBool())
+                return v.toBool();
+            if (v.isDouble())
+                return v.toInt() != 0;
+            if (v.isString()) {
+                const QString s = v.toString().trimmed().toLower();
+                if (s == QStringLiteral("true") || s == QStringLiteral("yes") || s == QStringLiteral("1"))
+                    return true;
+                if (s == QStringLiteral("false") || s == QStringLiteral("no") || s == QStringLiteral("0"))
+                    return false;
+            }
+        }
+        return fallback;
+    };
+
+    payload.insert(QStringLiteral("cameras"), pickInt(payload, {
+        QStringLiteral("cameras"),
+        QStringLiteral("active_cameras"),
+        QStringLiteral("activeCameras"),
+        QStringLiteral("camerasOnline"),
+        QStringLiteral("total_cameras")
+    }, 0));
+
+    payload.insert(QStringLiteral("detections"), pickInt(payload, {
+        QStringLiteral("detections"),
+        QStringLiteral("detections_today"),
+        QStringLiteral("todayDetections"),
+        QStringLiteral("totalDetections"),
+        QStringLiteral("count")
+    }, 0));
+
+    payload.insert(QStringLiteral("alerts"), pickInt(payload, {
+        QStringLiteral("alerts"),
+        QStringLiteral("alerts_open"),
+        QStringLiteral("openAlerts"),
+        QStringLiteral("alertCount")
+    }, 0));
+
+    payload.insert(QStringLiteral("ai_active"), pickBool(payload, {
+        QStringLiteral("ai_active"),
+        QStringLiteral("aiActive"),
+        QStringLiteral("ai_running"),
+        QStringLiteral("aiRunning")
+    }, false));
+
+    QJsonArray activity;
+    if (!dashboardState.hourlyDetections.isEmpty()) {
+        for (int value : dashboardState.hourlyDetections)
+            activity.append(value);
+    }
+    payload.insert(QStringLiteral("activity"), activity);
+    payload.insert(QStringLiteral("events"), dashboardState.events);
+
+    return payload;
 }
 
 /**
