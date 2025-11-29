@@ -26,6 +26,8 @@ struct EventPayload {
     QString category;
     float confidence = 0.0f;
     QString cameraLabel;
+    QString cameraId;
+    QString snapshotUrl;
     QDateTime timestamp;
     QString personId;
 };

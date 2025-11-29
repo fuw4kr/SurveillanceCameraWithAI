@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file CameraManager.h
  * @brief Manages multiple local and IP cameras using OpenCV + Qt.
  */
@@ -38,6 +38,7 @@ public:
 
     // 🔹 Для локальних USB камер
     QStringList listAvailableCameras();
+    QString cameraSource(int id) const;
 
 signals:
     void frameReady(int id, const QImage& frame);

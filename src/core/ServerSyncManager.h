@@ -14,6 +14,8 @@
 #include <QVector>
 #include <QUrl>
 
+class CameraManager;
+
 class ServerSyncManager : public QObject
 {
     Q_OBJECT
@@ -23,6 +25,7 @@ public:
 
     bool loadConfig(const QString& path = QString());
     void setAiProcessor(AIProcessor* processor);
+    void setCameraManager(CameraManager* manager);
     void start();
     void requestImmediatePersonsRefresh();
     void setCredentials(const QString& email, const QString& password);
@@ -108,9 +111,13 @@ private:
     bool ensureAuthenticated();
     bool writeEmbeddingsFile(const QList<EmbeddingRecord>& embeddings, QString* errorOut = nullptr) const;
     PersonRecord personById(const QString& id) const;
+    QString cameraSourceForLocal(int cameraId) const;
+    QString cameraIdForStream(const QString& streamUrl) const;
+    QString cameraIdForLocal(int cameraId) const;
 
     SupabaseClient* client = nullptr;
     AIProcessor* aiProcessor = nullptr;
+    CameraManager* cameraManager = nullptr;
     QTimer syncTimer;
     QQueue<QueuedEvent> eventQueue;
     QList<PersonRecord> personsCache;

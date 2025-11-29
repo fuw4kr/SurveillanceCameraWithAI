@@ -238,6 +238,7 @@ void MainWindow::setupUi()
 
     serverSync = new ServerSyncManager(this);
     serverSync->setAiProcessor(aiProcessor);
+    serverSync->setCameraManager(cameraManager);
 
     camerasPage = new CamerasPage(cameraManager, aiProcessor, serverSync, this);
     faceDbPage = new FaceDatabasePage(serverSync, this);
