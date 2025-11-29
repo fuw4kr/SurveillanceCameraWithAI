@@ -31,6 +31,10 @@
 #include <QString>
 #include <QThread>
 #include <QMetaObject>
+#include <QUrl>
+
+class QNetworkAccessManager;
+class QTimer;
 
 class ServerSyncManager;
 class FaceAlertController;
@@ -52,6 +56,8 @@ private slots:
     void toggleTheme();
     void handleRecognitionSlider(int value);
     void handleGpuToggle(bool checked);
+    void handleDashboardReply();
+    void handleAuthResult(const AuthResult& result);
     void onDetectionModelSelected(const QString& modelPath, const QString& configPath);
     void onEmbeddingModelSelected(const QString& modelPath);
     void handleServerStatus(const QString& status);
@@ -80,6 +86,7 @@ private:
     QStackedWidget* stackedWidget;
     SnapPreviewWindow* snapPreview;
     QListView* consoleView = nullptr;
+    DashboardPage* dashboardPage = nullptr;
 
     QWidget* settingsPopup = nullptr;
     QSlider* recognitionSlider = nullptr;
@@ -108,6 +115,14 @@ private:
     Theme currentTheme = Theme::Dark;
     QString darkStylesheet;
     QString lightStylesheet;
+    QNetworkAccessManager* networkManager = nullptr;
+    QTimer* dashboardTimer = nullptr;
+    SupabaseClient* supabaseClient = nullptr;
+    QString authToken;
+    bool dashboardRequestInFlight = false;
+    bool authRefreshInFlight = false;
+    QUrl apiBaseUrl{ QStringLiteral("https://myserver-tc2d.onrender.com") };
+    int dashboardRefreshIntervalMs = 60000;
 
     // === Setup ===
     void setupUi();
@@ -123,6 +138,9 @@ private:
     void applyTheme(Theme theme);
     void loadThemeStyles();
     QString loadStylesheet(const QString& path) const;
+    void setupDashboardPolling();
+    void fetchDashboard();
+    void refreshAuthToken();
 };
 
 #endif // MAINWINDOW_H
