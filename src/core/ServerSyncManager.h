@@ -31,7 +31,7 @@ public:
     void setCredentials(const QString& email, const QString& password);
     void applySessionToken(const QString& token, const QDateTime& expiresAt);
     void clearSession();
-    void sendUnknownAlert(const QString& cameraLabel, const QString& note);
+    void sendUnknownAlert(const QString& cameraLabel, const QString& note, const QImage& snapshot = QImage());
     void submitPersonRecord(const QString& name, const QString& role, bool authorized);
     QString personIdForName(const QString& name) const;
     void sendDetectionStatus(const QString& personId, int cameraId, bool active, const QDateTime& timestamp);

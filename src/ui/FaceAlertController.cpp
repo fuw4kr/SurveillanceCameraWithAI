@@ -269,7 +269,7 @@ void FaceAlertController::handleUnknownSelection(const PendingFaceAlert& alert)
     const QString message = tr("Unknown face detected on %1 at %2")
                                 .arg(cameraLabel,
                                     alert.detectedAt.toString(Qt::ISODate));
-    serverSync->sendUnknownAlert(cameraLabel, message);
+    serverSync->sendUnknownAlert(cameraLabel, message, alert.snapshot);
 
     if (alert.embedding.isEmpty()) {
         qWarning() << "[FaceAlert]" << "Cannot auto-register unknown face without embedding";

@@ -93,7 +93,7 @@ void ServerSyncManager::clearSession()
         client->clearSession();
 }
 
-void ServerSyncManager::sendUnknownAlert(const QString& cameraLabel, const QString& note)
+void ServerSyncManager::sendUnknownAlert(const QString& cameraLabel, const QString& note, const QImage& snapshot)
 {
     const QString alertType = QStringLiteral("unknown_face");
     QString message = note;
@@ -104,7 +104,7 @@ void ServerSyncManager::sendUnknownAlert(const QString& cameraLabel, const QStri
         return;
     }
     qInfo() << "[ServerSync]" << "Submitting unknown-face alert for" << cameraLabel << ":" << message;
-    client->postAlert(alertType, message, QStringLiteral("high"));
+    client->postAlert(alertType, message, QStringLiteral("high"), snapshot);
 }
 
 void ServerSyncManager::submitPersonRecord(const QString& name, const QString& role, bool authorized)

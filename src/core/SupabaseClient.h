@@ -47,7 +47,7 @@ public:
     void fetchPersons();
     void postEvent(const EventPayload& event);
     void postEvents(const QList<EventPayload>& events);
-    void postAlert(const QString& alertType, const QString& message, const QString& severity = QStringLiteral("medium"));
+    void postAlert(const QString& alertType, const QString& message, const QString& severity = QStringLiteral("medium"), const QImage& snapshot = QImage());
     void createPerson(const QString& name, const QString& role, bool authorized, const QString& imageUrl = QString());
     void updatePerson(const QString& personId, const QJsonObject& fields);
     void deletePerson(const QString& personId);
