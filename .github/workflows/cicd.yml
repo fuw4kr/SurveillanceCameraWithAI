@@ -61,6 +61,7 @@ env:
   PACKAGE_ARTIFACTS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.package_artifacts || 'true' }}
   FORCE_PUBLISH_RELEASE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release || 'false' }}
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref_name }}
+  ARCHIVE_PATH: "C:/Users/runneradmin/AppData/Local/vcpkg/archives"
 
 jobs:
   build:
