@@ -41,6 +41,8 @@ public:
     void uploadEmbedding(const QString& personId, const QString& modelName, const QVector<float>& vector);
     void uploadPersonAvatar(const QString& personId, const QImage& image);
     void submitCameraRecord(const QString& name, const QString& streamUrl, const QString& ipAddress = QString(), const QString& location = QString());
+    void deleteCameraRecord(const QString& cameraId);
+    void updateCameraStatus(const QString& cameraId, const QString& status);
     QUrl baseUrl() const { return serverUrl; }
 
 signals:
@@ -58,6 +60,10 @@ signals:
     void camerasUpdated(const QList<CameraRecord>& cameras);
     void cameraSubmitted(const CameraRecord& camera);
     void cameraSubmissionFailed(const QString& error);
+    void cameraDeleted(const QString& cameraId);
+    void cameraDeleteFailed(const QString& error);
+    void cameraUpdated(const CameraRecord& camera);
+    void cameraUpdateFailed(const QString& error);
 
 private slots:
     void handleLoginResult(const AuthResult& result);
@@ -85,6 +91,10 @@ private slots:
     void handleCamerasFetchFailed(const QString& error);
     void handleCameraCreated(const CameraRecord& camera);
     void handleCameraCreateFailed(const QString& error);
+    void handleCameraDeleted(const QString& cameraId);
+    void handleCameraDeleteFailed(const QString& error);
+    void handleCameraUpdated(const CameraRecord& camera);
+    void handleCameraUpdateFailed(const QString& error);
 
 private:
     struct QueuedEvent {

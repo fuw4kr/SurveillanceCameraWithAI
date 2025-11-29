@@ -59,6 +59,10 @@ ServerSyncManager::ServerSyncManager(QObject* parent)
     connect(client, &SupabaseClient::camerasFetchFailed, this, &ServerSyncManager::handleCamerasFetchFailed);
     connect(client, &SupabaseClient::cameraCreated, this, &ServerSyncManager::handleCameraCreated);
     connect(client, &SupabaseClient::cameraCreateFailed, this, &ServerSyncManager::handleCameraCreateFailed);
+    connect(client, &SupabaseClient::cameraDeleted, this, &ServerSyncManager::handleCameraDeleted);
+    connect(client, &SupabaseClient::cameraDeleteFailed, this, &ServerSyncManager::handleCameraDeleteFailed);
+    connect(client, &SupabaseClient::cameraUpdated, this, &ServerSyncManager::handleCameraUpdated);
+    connect(client, &SupabaseClient::cameraUpdateFailed, this, &ServerSyncManager::handleCameraUpdateFailed);
 
     syncTimer.setSingleShot(false);
     syncTimer.setInterval(syncIntervalMs);
@@ -299,6 +303,35 @@ void ServerSyncManager::requestImmediatePersonsRefresh()
     requestPersonsRefresh();
 }
 
+void ServerSyncManager::deleteCameraRecord(const QString& cameraId)
+{
+    if (cameraId.isEmpty()) {
+        emit errorMessage(tr("Select a camera to delete."));
+        return;
+    }
+    if (!client->isAuthenticated() && !ensureAuthenticated())
+        return;
+    qInfo() << "[ServerSync]" << "Deleting camera" << cameraId;
+    emit statusMessage(tr("Deleting camera..."));
+    client->deleteCamera(cameraId);
+}
+
+void ServerSyncManager::updateCameraStatus(const QString& cameraId, const QString& status)
+{
+    const QString trimmedStatus = status.trimmed();
+    if (cameraId.isEmpty() || trimmedStatus.isEmpty()) {
+        emit errorMessage(tr("Missing camera status update parameters."));
+        return;
+    }
+    if (!client->isAuthenticated() && !ensureAuthenticated())
+        return;
+    QJsonObject fields;
+    fields.insert(QStringLiteral("status"), trimmedStatus);
+    qInfo() << "[ServerSync]" << "Updating camera status" << cameraId << trimmedStatus;
+    emit statusMessage(tr("Updating camera status to \"%1\"").arg(trimmedStatus));
+    client->updateCamera(cameraId, fields);
+}
+
 void ServerSyncManager::requestImmediateCamerasRefresh()
 {
     camerasRequestActive = false;
@@ -514,6 +547,35 @@ void ServerSyncManager::handleCameraCreateFailed(const QString& error)
 {
     qWarning() << "[ServerSync]" << "Camera submission failed:" << error;
     emit cameraSubmissionFailed(error);
+}
+
+void ServerSyncManager::handleCameraDeleted(const QString& cameraId)
+{
+    qInfo() << "[ServerSync]" << "Camera deleted on server:" << cameraId;
+    emit statusMessage(tr("Camera removed from server."));
+    emit cameraDeleted(cameraId);
+    requestImmediateCamerasRefresh();
+}
+
+void ServerSyncManager::handleCameraDeleteFailed(const QString& error)
+{
+    qWarning() << "[ServerSync]" << "Camera delete failed:" << error;
+    emit errorMessage(tr("Failed to delete camera: %1").arg(error));
+    emit cameraDeleteFailed(error);
+}
+
+void ServerSyncManager::handleCameraUpdated(const CameraRecord& camera)
+{
+    qInfo() << "[ServerSync]" << "Camera updated on server:" << camera.id << camera.status;
+    emit cameraUpdated(camera);
+    requestImmediateCamerasRefresh();
+}
+
+void ServerSyncManager::handleCameraUpdateFailed(const QString& error)
+{
+    qWarning() << "[ServerSync]" << "Camera update failed:" << error;
+    emit errorMessage(tr("Failed to update camera: %1").arg(error));
+    emit cameraUpdateFailed(error);
 }
 
 void ServerSyncManager::enqueueDetections(int cameraId, const QVector<Detection>& detections)
