@@ -1,3 +1,16 @@
+/**
+ * @file loginwindow.cpp
+ * @brief Implementation of the modal authentication dialog backed by Supabase.
+ *
+ * Builds the email/password form, sanitizes user input, and forwards credentials to
+ * the Supabase client while providing inline status feedback.
+ *
+ * @example
+ * LoginWindow login;
+ * if (login.exec() == QDialog::Accepted) {
+ *     auto session = login.session();
+ * }
+ */
 #include "loginwindow.h"
 
 #include <QLabel>
@@ -6,6 +19,13 @@
 #include <QVBoxLayout>
 
 namespace {
+/**
+ * @brief Normalizes the supplied email by trimming whitespace.
+ * @param email Raw user-entered email value.
+ * @return QString Trimmed email suitable for authentication.
+ * @throws None
+ * @example QString normalized = sanitizeEmail(" user@example.com ");
+ */
 QString sanitizeEmail(const QString& email)
 {
     return email.trimmed();

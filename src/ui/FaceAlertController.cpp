@@ -1,3 +1,15 @@
+/**
+ * @file FaceAlertController.cpp
+ * @brief Implements face alert prompting, auto-enroll flows, and server uploads.
+ *
+ * Listens to AIProcessor signals to enqueue unknown faces, throttles repeat prompts,
+ * and coordinates submissions of alerts, person records, embeddings, and avatars via
+ * ServerSyncManager while driving the UnknownFaceDialog UI.
+ *
+ * @example
+ * FaceAlertController controller(aiProcessor, sync, window);
+ * // Signal connections trigger dialog presentation automatically.
+ */
 #include "FaceAlertController.h"
 
 #include "../core/AIProcessor.h"
@@ -50,6 +62,19 @@ void FaceAlertController::handleFrame(int cameraId, const QImage& annotated, con
     Q_UNUSED(sourceSize);
 }
 
+/**
+ * @brief Queues an auto-enrolled face snapshot for presentation and upload.
+ *
+ * Creates a PendingFaceAlert with the supplied label, embedding, and preview image,
+ * defaulting camera metadata to placeholders because the source is implicit.
+ *
+ * @param label Label suggested by the auto-enroll process.
+ * @param embedding Embedding vector to be attached to the person record.
+ * @param preview Snapshot image of the detected face.
+ * @return void
+ * @throws None
+ * @example handleAutoEnroll("AutoEnroll", vector, previewImage);
+ */
 void FaceAlertController::handleAutoEnroll(const QString& label, const QVector<float>& embedding, const QImage& preview)
 {
     if (!serverSync || preview.isNull())
@@ -163,12 +188,32 @@ void FaceAlertController::handleAvatarUploadFailed(const QString& error)
         activeDialog->showError(error);
 }
 
+/**
+ * @brief Enqueues a pending alert and triggers presentation.
+ * @param alert Pending face alert to display and process.
+ * @return void
+ * @throws None
+ * @example enqueueFace(alert);
+ */
 void FaceAlertController::enqueueFace(const PendingFaceAlert& alert)
 {
     pendingQueue.enqueue(alert);
     presentNext();
 }
 
+/**
+ * @brief Checks if a similar face was recently prompted to avoid duplicate dialogs.
+ *
+ * Compares the center of the detection rectangle against recent prompts within a
+ * temporal and spatial threshold.
+ *
+ * @param cameraId Camera identifier emitting the detection.
+ * @param rect Detection bounding box in source coordinates.
+ * @param nowMs Current timestamp in milliseconds.
+ * @return bool True if a prompt was recently shown for a similar region.
+ * @throws None
+ * @example bool skip = isRecentlyPrompted(1, faceRect, now);
+ */
 bool FaceAlertController::isRecentlyPrompted(int cameraId, const QRect& rect, qint64 nowMs) const
 {
     const QPoint center = rect.center();
@@ -184,6 +229,13 @@ bool FaceAlertController::isRecentlyPrompted(int cameraId, const QRect& rect, qi
     return false;
 }
 
+/**
+ * @brief Removes stale prompt entries outside the configured time window.
+ * @param nowMs Current timestamp in milliseconds.
+ * @return void
+ * @throws None
+ * @example pruneRecent(QDateTime::currentMSecsSinceEpoch());
+ */
 void FaceAlertController::pruneRecent(qint64 nowMs)
 {
     const qint64 threshold = nowMs - 6000;
@@ -196,6 +248,17 @@ void FaceAlertController::pruneRecent(qint64 nowMs)
     }
 }
 
+/**
+ * @brief Presents the next pending face alert in a modal dialog.
+ *
+ * Skips presentation when another dialog is active, binds dialog signals for
+ * unknown/known actions, and schedules processing of the next queued alert once
+ * the current dialog is closed.
+ *
+ * @return void
+ * @throws None
+ * @example presentNext();
+ */
 void FaceAlertController::presentNext()
 {
     if (dialogActive || pendingQueue.isEmpty())
@@ -229,6 +292,17 @@ void FaceAlertController::presentNext()
     dialog->open();
 }
 
+/**
+ * @brief Sends an unknown-face alert to the server without enrollment.
+ *
+ * Formats a descriptive message including camera label and timestamp before
+ * delegating submission to the server sync manager.
+ *
+ * @param alert Pending face alert metadata.
+ * @return void
+ * @throws None
+ * @example handleUnknownSelection(alert);
+ */
 void FaceAlertController::handleUnknownSelection(const PendingFaceAlert& alert)
 {
     if (!serverSync)
@@ -242,6 +316,20 @@ void FaceAlertController::handleUnknownSelection(const PendingFaceAlert& alert)
     serverSync->sendUnknownAlert(cameraLabel, message);
 }
 
+/**
+ * @brief Submits a new person record and queues embedding/avatar uploads.
+ *
+ * Copies relevant alert data for use after the person record is created, marks
+ * the controller as awaiting person creation, and requests server submission.
+ *
+ * @param alert Pending face alert data selected as a known person.
+ * @param name Person's name provided by the operator.
+ * @param role Optional role/department label.
+ * @param authorized Whether the person is authorized.
+ * @return void
+ * @throws None
+ * @example handleKnownSelection(alert, "Alice", "Staff", true);
+ */
 void FaceAlertController::handleKnownSelection(const PendingFaceAlert& alert, const QString& name, const QString& role, bool authorized)
 {
     if (!serverSync)

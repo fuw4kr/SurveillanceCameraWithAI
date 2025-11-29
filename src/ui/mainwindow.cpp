@@ -1,6 +1,17 @@
 /**
  * @file MainWindow.cpp
- * @brief Implementation of MainWindow (no .ui file).
+ * @brief Implementation of the frameless primary application shell.
+ *
+ * This unit assembles the sidebar-driven workspace, wires AI processing
+ * to UI pages, and manages theme loading, model selection, and periodic
+ * dashboard polling. Networking is authenticated via Supabase, and model
+ * paths are resolved from user settings or packaged defaults.
+ *
+ * @example
+ * // Typical startup sequence after login:
+ * MainWindow w;
+ * w.initializeServerSync(session);
+ * w.show();
  */
 
 #include "MainWindow.h"
@@ -29,6 +40,22 @@
 #include <QMessageBox>
 #include <algorithm>
 
+/**
+ * @brief Constructs the main window, assembles UI pages, and primes background services.
+ *
+ * Creates navigation, settings, and console areas; loads theme stylesheets; attempts to
+ * resolve detection and embedding models from user settings or bundled defaults; and
+ * moves the AI processor to a dedicated worker thread. Also instantiates the server
+ * synchronization manager and face alert controller.
+ *
+ * @param parent Optional Qt parent for ownership and stacking.
+ * @return MainWindow fully initialized but not yet shown.
+ * @throws std::bad_alloc If widget or controller allocations fail.
+ * @example
+ * auto* window = new MainWindow();
+ * window->initializeServerSync(session);
+ * window->show();
+ */
 MainWindow::MainWindow(QWidget* parent)
     : FramelessWindow(parent)
 {
@@ -50,6 +77,17 @@ MainWindow::MainWindow(QWidget* parent)
     connect(this, &FramelessWindow::windowMaximizedChanged, this, &MainWindow::updateMaximizeIcon);
 }
 
+/**
+ * @brief Shuts down worker threads and disposes auxiliary widgets.
+ *
+ * Ensures the AI thread quits and is deleted before releasing the processor pointer,
+ * and hides/destroys the snapshot preview to avoid dangling visuals.
+ *
+ * @return void
+ * @throws None No exceptions are thrown during teardown.
+ * @example
+ * delete window; // Safe cleanup of AI thread and preview window.
+ */
 MainWindow::~MainWindow()
 {
     if (aiThread) {
@@ -67,6 +105,18 @@ MainWindow::~MainWindow()
 }
 
 // === UI building ===
+/**
+ * @brief Builds the central layout, navigation list, and stacked pages.
+ *
+ * Instantiates title bar placeholders, sidebar entries, stacked widgets for each page,
+ * loads persisted model settings, allocates AI and camera managers, and connects early
+ * page-level signals. Also bootstraps model loading with fallback candidates.
+ *
+ * @return void
+ * @throws std::bad_alloc If any Qt widget allocation fails.
+ * @example
+ * setupUi(); // Called internally from the constructor.
+ */
 void MainWindow::setupUi()
 {
     QWidget* central = new QWidget(this);
@@ -294,6 +344,17 @@ void MainWindow::setupUi()
 }
 
 // === Title bar ===
+/**
+ * @brief Configures the frameless title bar controls and window actions.
+ *
+ * Sets fixed height constraints for the title bar and wires minimize/close/maximize
+ * buttons to the corresponding window slots.
+ *
+ * @return void
+ * @throws None
+ * @example
+ * setupTitleBar(); // Invoked during construction.
+ */
 void MainWindow::setupTitleBar()
 {
     titleBar->setMinimumHeight(36);
@@ -304,6 +365,17 @@ void MainWindow::setupTitleBar()
     connect(btnMaximize, &QPushButton::clicked, this, &MainWindow::toggleMaximizeRestore);
 }
 
+/**
+ * @brief Creates the settings popup for recognition cadence and GPU preference.
+ *
+ * Builds a popup widget with slider and checkbox controls that mirror cached settings,
+ * and primes the UI with current values before showing.
+ *
+ * @return void
+ * @throws None
+ * @example
+ * setupSettingsPopup();
+ */
 void MainWindow::setupSettingsPopup()
 {
     settingsPopup = new QWidget(this, Qt::Popup);
@@ -337,6 +409,12 @@ void MainWindow::setupSettingsPopup()
 }
 
 // === Sidebar ===
+/**
+ * @brief Initializes sidebar selection behavior and default selection.
+ * @return void
+ * @throws None
+ * @example setupSidebar();
+ */
 void MainWindow::setupSidebar()
 {
     listModes->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -344,11 +422,27 @@ void MainWindow::setupSidebar()
 }
 
 // === Console ===
+/**
+ * @brief Placeholder for console setup; reserved for future log view wiring.
+ * @return void
+ * @throws None
+ * @example setupConsole();
+ */
 void MainWindow::setupConsole()
 {
 }
 
 // === Connections ===
+/**
+ * @brief Connects UI controls to their handlers and wires AI processor signals.
+ *
+ * Binds sidebar navigation, settings toggles, model selection callbacks, and AI processor
+ * change signals to update internal caches and UI state in response to runtime events.
+ *
+ * @return void
+ * @throws None
+ * @example setupConnections();
+ */
 void MainWindow::setupConnections()
 {
     connect(listModes, &QListWidget::currentRowChanged,
@@ -387,6 +481,17 @@ void MainWindow::toggleTheme()
     applyTheme(nextTheme);
 }
 
+/**
+ * @brief Applies the requested theme by loading the corresponding stylesheet.
+ *
+ * Switches the global application stylesheet, updates the theme toggle text/tooltip,
+ * and refreshes the maximize icon so glyph contrast matches the theme.
+ *
+ * @param theme Target theme enumeration value.
+ * @return void
+ * @throws None
+ * @example applyTheme(Theme::Light);
+ */
 void MainWindow::applyTheme(Theme theme)
 {
     currentTheme = theme;
@@ -410,6 +515,16 @@ void MainWindow::applyTheme(Theme theme)
     updateMaximizeIcon(isMaximized);
 }
 
+/**
+ * @brief Loads both light and dark QSS stylesheets from resources.
+ *
+ * Reads bundled style files into memory for fast switching; logs warnings when
+ * resources are missing or empty.
+ *
+ * @return void
+ * @throws None
+ * @example loadThemeStyles();
+ */
 void MainWindow::loadThemeStyles()
 {
     lightStylesheet = loadStylesheet(":/resources/styles/light.qss");
@@ -419,6 +534,17 @@ void MainWindow::loadThemeStyles()
     }
 }
 
+/**
+ * @brief Loads a stylesheet file from disk or Qt resources.
+ *
+ * Opens the given path as UTF-8 text and returns the content for application-wide
+ * styling.
+ *
+ * @param path Qt resource URL or filesystem path to a .qss file.
+ * @return QString Stylesheet contents, or empty on failure.
+ * @throws None Errors are logged but not thrown.
+ * @example QString css = loadStylesheet(":/resources/styles/dark.qss");
+ */
 QString MainWindow::loadStylesheet(const QString& path) const
 {
     QFile file(path);
@@ -437,6 +563,17 @@ void MainWindow::onModeChanged(int index)
     qDebug() << "Mode changed to:" << mode;
 }
 
+/**
+ * @brief Updates the window control glyph based on maximize state and theme.
+ *
+ * Chooses light or dark icon assets to ensure contrast remains legible in both
+ * themes.
+ *
+ * @param maxed True when the window is maximized.
+ * @return void
+ * @throws None
+ * @example updateMaximizeIcon(true);
+ */
 void MainWindow::updateMaximizeIcon(bool maxed)
 {
     const bool isLight = (currentTheme == Theme::Light);
@@ -452,6 +589,16 @@ void MainWindow::updateMaximizeIcon(bool maxed)
     btnMaximize->setIcon(QIcon(path));
 }
 
+/**
+ * @brief Toggles the settings popup visibility and repositions it relative to the settings button.
+ *
+ * Re-syncs UI controls with cached values before showing the popup and clamps its
+ * position to the visible screen.
+ *
+ * @return void
+ * @throws None
+ * @example toggleSettingsPopup();
+ */
 void MainWindow::toggleSettingsPopup()
 {
     if (!settingsPopup || !btnSettings)
@@ -472,6 +619,17 @@ void MainWindow::toggleSettingsPopup()
     settingsPopup->show();
 }
 
+/**
+ * @brief Updates cached recognition interval and propagates it to the AI processor.
+ *
+ * Also updates the inline label to reflect the slider position for immediate
+ * user feedback.
+ *
+ * @param value New interval in milliseconds.
+ * @return void
+ * @throws None
+ * @example handleRecognitionSlider(750);
+ */
 void MainWindow::handleRecognitionSlider(int value)
 {
     cachedRecognitionInterval = value;
@@ -481,6 +639,17 @@ void MainWindow::handleRecognitionSlider(int value)
         QMetaObject::invokeMethod(aiProcessor, "setRecognitionIntervalMs", Qt::QueuedConnection, Q_ARG(int, value));
 }
 
+/**
+ * @brief Toggles GPU preference for embedding inference and reloads the model if necessary.
+ *
+ * If an embedding model is already loaded, reloads it asynchronously to apply the
+ * new backend preference.
+ *
+ * @param checked True to use GPU, false to prefer CPU.
+ * @return void
+ * @throws None
+ * @example handleGpuToggle(false);
+ */
 void MainWindow::handleGpuToggle(bool checked)
 {
     cachedGpuPreference = checked;
@@ -493,6 +662,16 @@ void MainWindow::handleGpuToggle(bool checked)
     }
 }
 
+/**
+ * @brief Synchronizes UI controls with cached model and hardware preferences.
+ *
+ * Uses signal blockers to prevent feedback loops when updating slider and checkbox
+ * states.
+ *
+ * @return void
+ * @throws None
+ * @example refreshSettingsUi();
+ */
 void MainWindow::refreshSettingsUi()
 {
     if (recognitionSlider) {
@@ -510,6 +689,16 @@ void MainWindow::refreshSettingsUi()
 }
 
 // === Dashboard API ===
+/**
+ * @brief Configures dashboard networking, Supabase auth hooks, and polling timer.
+ *
+ * Ensures network manager and Supabase client exist, wires auth refresh callbacks,
+ * initializes the periodic dashboard timer, and triggers an immediate fetch.
+ *
+ * @return void
+ * @throws None
+ * @example setupDashboardPolling();
+ */
 void MainWindow::setupDashboardPolling()
 {
     if (!networkManager)
@@ -532,6 +721,16 @@ void MainWindow::setupDashboardPolling()
     fetchDashboard();
 }
 
+/**
+ * @brief Issues an authenticated GET request to the dashboard API endpoint.
+ *
+ * Skips issuing if a request is already in flight or if an auth token is missing,
+ * and triggers token refresh when required.
+ *
+ * @return void
+ * @throws None
+ * @example fetchDashboard();
+ */
 void MainWindow::fetchDashboard()
 {
     if (dashboardRequestInFlight || !networkManager)
@@ -553,6 +752,16 @@ void MainWindow::fetchDashboard()
     connect(reply, &QNetworkReply::finished, this, &MainWindow::handleDashboardReply);
 }
 
+/**
+ * @brief Handles dashboard HTTP responses, updating UI or triggering auth refresh.
+ *
+ * Parses JSON payloads into the dashboard page and retries authentication on 401/403
+ * responses.
+ *
+ * @return void
+ * @throws None
+ * @example handleDashboardReply();
+ */
 void MainWindow::handleDashboardReply()
 {
     dashboardRequestInFlight = false;
@@ -577,6 +786,16 @@ void MainWindow::handleDashboardReply()
     reply->deleteLater();
 }
 
+/**
+ * @brief Refreshes the authentication token using environment variables or Supabase.
+ *
+ * Prefers a pre-set bearer token; otherwise attempts email/password login. Guards
+ * against concurrent refresh attempts.
+ *
+ * @return void
+ * @throws None
+ * @example refreshAuthToken();
+ */
 void MainWindow::refreshAuthToken()
 {
     if (authRefreshInFlight)
@@ -604,6 +823,16 @@ void MainWindow::refreshAuthToken()
     supabaseClient->login(email, password);
 }
 
+/**
+ * @brief Consumes Supabase login results, updates stored token, and triggers dashboard fetch.
+ *
+ * Logs warnings on failures and resets the refresh-in-flight flag.
+ *
+ * @param result Authentication result from Supabase client.
+ * @return void
+ * @throws None
+ * @example handleAuthResult(result);
+ */
 void MainWindow::handleAuthResult(const AuthResult& result)
 {
     authRefreshInFlight = false;
@@ -614,6 +843,20 @@ void MainWindow::handleAuthResult(const AuthResult& result)
 
     authToken = result.token;
     fetchDashboard();
+}
+
+/**
+ * @brief Applies a user-selected detection model path and persists preferences.
+ *
+ * Updates saved settings with relative paths and refreshes the settings page UI to
+ * mirror the active detector and configuration.
+ *
+ * @param modelPath New detector model path chosen by the user.
+ * @param configPath Optional detector config path.
+ * @return void
+ * @throws None
+ * @example onDetectionModelSelected("C:/models/det.onnx", "C:/models/det.cfg");
+ */
 void MainWindow::onDetectionModelSelected(const QString& modelPath, const QString& configPath)
 {
     if (!loadDetectionModel(modelPath, configPath))
@@ -625,6 +868,17 @@ void MainWindow::onDetectionModelSelected(const QString& modelPath, const QStrin
         settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel);
 }
 
+/**
+ * @brief Persists the newly selected embedding model and reloads it through the AI processor.
+ *
+ * Converts the absolute path to a relative setting for portability, saves preferences,
+ * and updates the settings page to reflect the active models.
+ *
+ * @param modelPath Filesystem path of the embedding model chosen by the user.
+ * @return void
+ * @throws None
+ * @example onEmbeddingModelSelected("C:/models/arcface.onnx");
+ */
 void MainWindow::onEmbeddingModelSelected(const QString& modelPath)
 {
     if (!loadEmbeddingModel(modelPath))
@@ -635,6 +889,19 @@ void MainWindow::onEmbeddingModelSelected(const QString& modelPath)
         settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel);
 }
 
+/**
+ * @brief Attempts to load the user-selected detection model and persist the choice.
+ *
+ * Validates the provided paths, delegates loading to the AI processor, and updates
+ * the settings page with the current model selections.
+ *
+ * @param modelPath Path to the detector model file.
+ * @param configPath Optional configuration file path (e.g., Caffe prototxt).
+ * @param warnOnFailure True to show a message box on failure.
+ * @return bool True when the model loads successfully.
+ * @throws None
+ * @example loadDetectionModel("/models/scrfd.onnx", QString(), true);
+ */
 bool MainWindow::loadDetectionModel(const QString& modelPath, const QString& configPath, bool warnOnFailure)
 {
     if (!aiProcessor || modelPath.isEmpty()) {
@@ -660,6 +927,18 @@ bool MainWindow::loadDetectionModel(const QString& modelPath, const QString& con
     return true;
 }
 
+/**
+ * @brief Loads a face embedding model and refreshes related UI state.
+ *
+ * Updates cached recognition interval and GPU preference from the AI processor
+ * upon success, and refreshes settings widgets to reflect the active model.
+ *
+ * @param modelPath Path to the embedding model file.
+ * @param warnOnFailure True to show a warning dialog on failure.
+ * @return bool True if the model loads successfully.
+ * @throws None
+ * @example loadEmbeddingModel("/models/arcface.onnx");
+ */
 bool MainWindow::loadEmbeddingModel(const QString& modelPath, bool warnOnFailure)
 {
     if (!aiProcessor || modelPath.isEmpty()) {
@@ -687,6 +966,16 @@ bool MainWindow::loadEmbeddingModel(const QString& modelPath, bool warnOnFailure
     return true;
 }
 
+/**
+ * @brief Updates the title-bar label with the active detection and embedding models.
+ *
+ * Displays just the file names to keep the bar compact, substituting "-" when a
+ * model is missing.
+ *
+ * @return void
+ * @throws None
+ * @example updateModelInfoLabel();
+ */
 void MainWindow::updateModelInfoLabel()
 {
     if (!modelInfoLabel)
@@ -704,16 +993,45 @@ void MainWindow::updateModelInfoLabel()
                 toLabel(currentEmbeddingModel)));
 }
 
+/**
+ * @brief Logs informational server status messages.
+ *
+ * Intended for lightweight telemetry without surfacing UI notifications.
+ *
+ * @param status Status string emitted by the server sync manager.
+ * @return void
+ * @throws None
+ * @example handleServerStatus("Refresh complete");
+ */
 void MainWindow::handleServerStatus(const QString& status)
 {
     qInfo() << "[Server]" << status;
 }
 
+/**
+ * @brief Logs server error messages for troubleshooting.
+ *
+ * @param error Error details emitted from server synchronization.
+ * @return void
+ * @throws None
+ * @example handleServerError("Timeout while polling dashboard");
+ */
 void MainWindow::handleServerError(const QString& error)
 {
     qWarning() << "[Server]" << error;
 }
 
+/**
+ * @brief Applies login credentials to the sync manager and starts background sync.
+ *
+ * Transfers user email/password or bearer token from the login session and triggers
+ * the synchronization loop, enabling cloud updates for pages such as the face database.
+ *
+ * @param session Result of the login dialog containing credentials and token.
+ * @return void
+ * @throws None
+ * @example initializeServerSync(loginSession);
+ */
 void MainWindow::initializeServerSync(const LoginSession& session)
 {
     if (!serverSync)
@@ -726,6 +1044,16 @@ void MainWindow::initializeServerSync(const LoginSession& session)
     qInfo() << "[MainWindow]" << "Server synchronization initialized";
 }
 
+/**
+ * @brief Requests an immediate person refresh from the server sync manager.
+ *
+ * Provides users a manual override to fetch latest cloud data outside the timer
+ * interval.
+ *
+ * @return void
+ * @throws None
+ * @example handleManualSync();
+ */
 void MainWindow::handleManualSync()
 {
     if (!serverSync)
