@@ -235,7 +235,7 @@ void MainWindow::setupUi()
     camerasPage = new CamerasPage(cameraManager, aiProcessor, this);
     analyticsPage = new AnalyticsPage(cameraManager, aiProcessor, this);
     faceDbPage = new FaceDatabasePage(serverSync, this);
-    face3dPage = new Face3DViewerPage(aiProcessor, this);
+    face3dPage = new Face3DViewerPage(aiProcessor, serverSync, this);
 
     settingsPage = new SettingsPage(modelsDirectory, this);
     connect(serverSync, &ServerSyncManager::personsUpdated, faceDbPage, &FaceDatabasePage::setRemotePersons);

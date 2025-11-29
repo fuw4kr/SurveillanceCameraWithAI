@@ -43,6 +43,7 @@ private:
     std::string inputName;
     std::string outputName;
     std::vector<int64_t> inputShape;
+    std::vector<int64_t> inputRunShape;
     std::vector<int64_t> outputShape;
     size_t inputTensorSize = 0;
     size_t outputTensorSize = 0;

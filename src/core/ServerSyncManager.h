@@ -12,6 +12,7 @@
 #include <QTimer>
 #include <QSize>
 #include <QVector>
+#include <QUrl>
 
 class ServerSyncManager : public QObject
 {
@@ -32,10 +33,12 @@ public:
     QString personIdForName(const QString& name) const;
     void sendDetectionStatus(const QString& personId, int cameraId, bool active, const QDateTime& timestamp);
     void renamePerson(const QString& personId, const QString& newName);
+    void updatePersonRole(const QString& personId, const QString& newRole);
     void deletePerson(const QString& personId);
     void requestEmbeddingsRefresh();
     void uploadEmbedding(const QString& personId, const QString& modelName, const QVector<float>& vector);
     void uploadPersonAvatar(const QString& personId, const QImage& image);
+    QUrl baseUrl() const { return serverUrl; }
 
 signals:
     void personsUpdated(const QList<PersonRecord>& persons);
