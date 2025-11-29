@@ -23,7 +23,7 @@ jobs:
           sudo apt-get install -y doxygen graphviz
 
       - name: Prepare output directory
-        run: mkdir -p out/docs
+        run: mkdir -p docs
 
       - name: Generate documentation
         run: doxygen Doxyfile
@@ -32,11 +32,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: doxygen-html
-          path: out/docs/html
+          path: docs/html
           if-no-files-found: error
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./out/docs/html
+          publish_dir: ./docs/html
