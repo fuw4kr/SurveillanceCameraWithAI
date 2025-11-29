@@ -19,7 +19,10 @@
  * CameraManager mgr;
  * mgr.openCamera(0, "rtsp://cam/stream");
  * mgr.startCapture(0);
- * connect(&mgr, &CameraManager::frameReady, [](int id, const QImage& frame){ /* ... */ });
+ * connect(&mgr, &CameraManager::frameReady, [](int id, const QImage& frame){
+ *     Q_UNUSED(id);
+ *     qDebug() << frame.size();
+ * });
  */
 
 #include <QObject>
