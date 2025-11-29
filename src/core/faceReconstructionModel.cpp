@@ -1,3 +1,7 @@
+/**
+ * @file faceReconstructionModel.cpp
+ * @brief Implements 3D face mesh reconstruction using an ONNX model.
+ */
 #include "faceReconstructionModel.h"
 
 #include <QCoreApplication>

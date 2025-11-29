@@ -1,3 +1,10 @@
+/**
+ * @file AIProcessor.cpp
+ * @brief Implements face/object detection and recognition pipelines.
+ *
+ * Binds OpenCV detectors with ONNX-based embedding inference, manages caching,
+ * rate limiting, and emits Qt signals for processed frames.
+ */
 #include "AIProcessor.h"
 #include "AIProcessorONNX.h"
 

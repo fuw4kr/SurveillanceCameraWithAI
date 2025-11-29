@@ -1,3 +1,10 @@
+/**
+ * @file AIProcessorONNX.cpp
+ * @brief Implements ONNX Runtime-based face embedding extraction with OpenVINO support.
+ *
+ * Manages session creation, preprocessing, provider selection, and embedding
+ * inference for face crops supplied as cv::Mat.
+ */
 #include "AIProcessorONNX.h"
 
 #include <QDebug>

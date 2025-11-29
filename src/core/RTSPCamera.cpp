@@ -1,3 +1,7 @@
+/**
+ * @file RTSPCamera.cpp
+ * @brief Implements RTSP camera wrapper coordinating video/audio and status.
+ */
 #include "RTSPCamera.h"
 
 #include <QDebug>

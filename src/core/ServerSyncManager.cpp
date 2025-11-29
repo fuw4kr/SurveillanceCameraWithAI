@@ -1,3 +1,7 @@
+/**
+ * @file ServerSyncManager.cpp
+ * @brief Implements synchronization of detections, persons, and embeddings with the backend.
+ */
 #include "ServerSyncManager.h"
 
 #include <QCoreApplication>

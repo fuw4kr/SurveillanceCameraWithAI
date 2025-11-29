@@ -1,3 +1,7 @@
+/**
+ * @file SupabaseClient.cpp
+ * @brief Implements REST interactions for authentication, CRUD, alerts, and embeddings.
+ */
 #include "SupabaseClient.h"
 
 #include <QBuffer>
