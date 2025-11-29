@@ -20,12 +20,12 @@ UnknownFaceDialog::UnknownFaceDialog(const QImage& snapshot, const QString& came
 void UnknownFaceDialog::setupUi(const QImage& snapshot, const QString& cameraLabel, qreal confidence)
 {
     auto* mainLayout = new QVBoxLayout(this);
-    auto* title = new QLabel(tr("Підтвердіть дію з розпізнаним обличчям"));
+    auto* title = new QLabel(tr("Confirm action with recognized face"));
     title->setStyleSheet(QStringLiteral("font-size:16px; font-weight:600;"));
     mainLayout->addWidget(title);
 
     auto* cameraLabelWidget = new QLabel(
-        tr("Камера: <b>%1</b><br/>Достовірність: <b>%2%</b>")
+        tr("Camera: <b>%1</b><br/>Certainty: <b>%2%</b>")
             .arg(cameraLabel,
                 QString::number(static_cast<int>(confidence * 100.0))));
     cameraLabelWidget->setTextFormat(Qt::RichText);
@@ -40,13 +40,13 @@ void UnknownFaceDialog::setupUi(const QImage& snapshot, const QString& cameraLab
     mainLayout->addWidget(previewLabel, 0, Qt::AlignHCenter);
 
     auto* formLayout = new QVBoxLayout;
-    auto* nameLabel = new QLabel(tr("Ім'я співробітника (якщо відоме):"));
+    auto* nameLabel = new QLabel(tr("Employee name (if known):"));
     nameEdit = new QLineEdit(this);
-    nameEdit->setPlaceholderText(tr("Ім'я та прізвище"));
-    auto* roleLabel = new QLabel(tr("Роль / посада:"));
+    nameEdit->setPlaceholderText(tr("First and last name"));
+    auto* roleLabel = new QLabel(tr("Role / position:"));
     roleEdit = new QLineEdit(this);
-    roleEdit->setPlaceholderText(tr("Напр. Охоронець, Гість, Співробітник"));
-    authorizedCheck = new QCheckBox(tr("Дозволений доступ"), this);
+    roleEdit->setPlaceholderText(tr("E.g. Security Guard, Guest, Employee"));
+    authorizedCheck = new QCheckBox(tr("Allowed access"), this);
 
     formLayout->addWidget(nameLabel);
     formLayout->addWidget(nameEdit);
@@ -56,11 +56,11 @@ void UnknownFaceDialog::setupUi(const QImage& snapshot, const QString& cameraLab
     mainLayout->addLayout(formLayout);
 
     auto* buttonLayout = new QHBoxLayout;
-    unknownButton = new QPushButton(tr("Невідоме обличчя"), this);
+    unknownButton = new QPushButton(tr("Unknown face"), this);
     unknownButton->setStyleSheet(QStringLiteral("background:#f97316; color:white; font-weight:600;"));
-    saveButton = new QPushButton(tr("Зберегти як відоме"), this);
+    saveButton = new QPushButton(tr("Save as Known"), this);
     saveButton->setStyleSheet(QStringLiteral("background:#16a34a; color:white; font-weight:600;"));
-    skipButton = new QPushButton(tr("Пропустити"), this);
+    skipButton = new QPushButton(tr("Skip"), this);
 
     buttonLayout->addWidget(unknownButton);
     buttonLayout->addWidget(saveButton);
@@ -88,7 +88,7 @@ void UnknownFaceDialog::setupUi(const QImage& snapshot, const QString& cameraLab
             return;
         }
         emit savePerson(name, role, authorizedCheck->isChecked());
-        setBusyState(tr("Створюємо запис на сервері..."));
+        setBusyState(tr("Creating a record on the server..."));
     });
     connect(skipButton, &QPushButton::clicked, this, [this]() {
         emit skipped();
