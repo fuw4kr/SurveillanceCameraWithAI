@@ -1,0 +1,20 @@
+var searchData=
+[
+  ['dashboardpage_0',['DashboardPage',['../classDashboardPage.html#a4225ba67e20cf9ff5a51675d86b1a8c9',1,'DashboardPage']]],
+  ['decodingloop_1',['decodingLoop',['../classFFVideoDecoder.html#a7f5dcc827618c554cfd50a19d6717b30',1,'FFVideoDecoder']]],
+  ['decodinglooplocal_2',['decodingLoopLocal',['../classFFVideoDecoder.html#aaf82ddf4659d7c48754d15459ff0db2e',1,'FFVideoDecoder']]],
+  ['deletecamera_3',['deleteCamera',['../classSupabaseClient.html#a8977fe9ad40ffe30f83f325d9a9d52a8',1,'SupabaseClient']]],
+  ['deletecamerarecord_4',['deleteCameraRecord',['../classServerSyncManager.html#a4e7db01c694beeb88de0da3c88458344',1,'ServerSyncManager']]],
+  ['deletefaceprofile_5',['deleteFaceProfile',['../classAIProcessor.html#a37387bf6c6f3a014b0c4d4d39d3f7e7a',1,'AIProcessor']]],
+  ['deleteperson_6',['deleteperson',['../classServerSyncManager.html#a06b8ec6ab834a94c1d1dbf8ad6c9c3ae',1,'ServerSyncManager::deletePerson()'],['../classSupabaseClient.html#a3295d01615a421d6eaaeb02e7bf85670',1,'SupabaseClient::deletePerson()']]],
+  ['detectfaces_7',['detectFaces',['../classAIProcessor.html#a11a719e885014f9cb8c89545aec6f496',1,'AIProcessor']]],
+  ['detectioncachekey_8',['detectionCacheKey',['../classAIProcessor.html#ab5525c64a71ffb7fa05a086dea216316',1,'AIProcessor']]],
+  ['detectioneventcontroller_9',['DetectionEventController',['../classDetectionEventController.html#a774ea15791ba306ae52b07afcc33c8c8',1,'DetectionEventController']]],
+  ['detectionlabelfor_10',['detectionLabelFor',['../classSettingsPage.html#a38474292bff5f8d5fca3f2cf918c5663',1,'SettingsPage']]],
+  ['detectionmodelselected_11',['detectionModelSelected',['../classSettingsPage.html#a4ea851afa67a60d8cfe68587177cf7e9',1,'SettingsPage']]],
+  ['detectionsready_12',['detectionsReady',['../classAIProcessor.html#aa0fdf3c8cfc93aa88c8d76df66f88817',1,'AIProcessor']]],
+  ['detectobjects_13',['detectObjects',['../classAIProcessor.html#ad55a8eb033f22fafc1a6128b5779fbf4',1,'AIProcessor']]],
+  ['detectpersons_14',['detectPersons',['../classAIProcessor.html#a06e5f5cefbf2775c07161ba46296753b',1,'AIProcessor']]],
+  ['detectresizeregion_15',['detectresizeregion',['../classFramelessWindow.html#aa8a84a14413986a3e3a04144f24ca1c9',1,'FramelessWindow::detectResizeRegion()'],['../classFramelessDialog.html#aa5d921d37b7c077adeb84daee884c675',1,'FramelessDialog::detectResizeRegion()']]],
+  ['disableaudio_16',['disableAudio',['../classCameraManager.html#adab4eb4a8b665dc50a533fee85c9145f',1,'CameraManager']]]
+];

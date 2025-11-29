@@ -1,0 +1,25 @@
+var searchData=
+[
+  ['darkstylesheet_0',['darkStylesheet',['../classMainWindow.html#a9c7eac8164415d2b88806a4cf8afc86e',1,'MainWindow']]],
+  ['dashboardpage_1',['dashboardPage',['../classMainWindow.html#a67b8e216c4c57795abd7874e675a2137',1,'MainWindow']]],
+  ['dashboardrefreshintervalms_2',['dashboardRefreshIntervalMs',['../classMainWindow.html#a969ffdb69fd5ab6c440366e5132ded9f',1,'MainWindow']]],
+  ['dashboardrequestinflight_3',['dashboardRequestInFlight',['../classMainWindow.html#ad598b88ee1d700dd268bc409631cbc60',1,'MainWindow']]],
+  ['dashboardtimer_4',['dashboardTimer',['../classMainWindow.html#a12be6ec079451fae5586b49101af4514',1,'MainWindow']]],
+  ['decoder_5',['decoder',['../structCameraManager_1_1CameraStream.html#acd71b42b1827782a8bac1b8dccc109e1',1,'CameraManager::CameraStream']]],
+  ['deletebutton_6',['deleteButton',['../classFaceDatabasePage.html#ada0fef05b1b750e1f26c85768ea5f19e',1,'FaceDatabasePage']]],
+  ['detectedat_7',['detectedAt',['../structPendingFaceAlert.html#abf0b30224f8c71b31b5902dd75413b47',1,'PendingFaceAlert']]],
+  ['detectioncombo_8',['detectionCombo',['../classSettingsPage.html#a7a11b327ba5e67c751dc24cd2405156e',1,'SettingsPage']]],
+  ['detectionconfig_9',['detectionConfig',['../structModelSettings.html#a7c1fd70579fda36e214f537c68baa5d4',1,'ModelSettings']]],
+  ['detectioncount_10',['detectionCount',['../structAttendanceRow.html#a5627aaf80023d8748612f2d1db28742e',1,'AttendanceRow']]],
+  ['detectionentries_11',['detectionEntries',['../classSettingsPage.html#a379edfa3f13bf7e4fba712283ee93ea0',1,'SettingsPage']]],
+  ['detectioneventcontroller_12',['detectionEventController',['../classMainWindow.html#a33e1623c92aa57e0002363e65fdacf54',1,'MainWindow']]],
+  ['detectionlabel_13',['detectionLabel',['../structEventPayload.html#a59bd2deb08a8117777d00e44e520f114',1,'EventPayload']]],
+  ['detectionlist_14',['detectionList',['../classAnalyticsPage.html#a7d625745f845da5dc21662867924209d',1,'AnalyticsPage']]],
+  ['detectionmodel_15',['detectionModel',['../structModelSettings.html#a5575b69c7fcc6f5d75a3cdc9fe9a404e',1,'ModelSettings']]],
+  ['detectionmutex_16',['detectionMutex',['../classCamerasPage.html#adcb8603ab36dc1eb70fdb3df6e519bb6',1,'CamerasPage']]],
+  ['detectionpathlabel_17',['detectionPathLabel',['../classSettingsPage.html#afea758b4bbd99a9a9088a5f3156be6aa',1,'SettingsPage']]],
+  ['detections_18',['detections',['../structProcessedFrame.html#ae2b5e2daaeb94c9fe824096034d61551',1,'ProcessedFrame']]],
+  ['dialogactive_19',['dialogActive',['../classFaceAlertController.html#ae0586b82b9964c80e4d6087253990f13',1,'FaceAlertController']]],
+  ['dragoffset_20',['dragoffset',['../classFramelessWindow.html#a4a3eae37682a28cf91e70dcb5e57310c',1,'FramelessWindow::dragOffset'],['../classFramelessDialog.html#a1451c94d6d3d92ea1894d38cac249567',1,'FramelessDialog::dragOffset'],['../classFramelessMessageBox.html#a7c110f7e19a3177d615ee2acde1be54d',1,'FramelessMessageBox::dragOffset']]],
+  ['dwelllabel_21',['dwellLabel',['../classAnalyticsPage.html#acb394fe0619d58630d783a6ac778779c',1,'AnalyticsPage']]]
+];

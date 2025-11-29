@@ -1,0 +1,26 @@
+var searchData=
+[
+  ['embeddingbackendchanged_0',['embeddingBackendChanged',['../classAIProcessor.html#a757d83b0a5c74a1e6d1bbdcf79b5cb60',1,'AIProcessor']]],
+  ['embeddingmodelselected_1',['embeddingModelSelected',['../classSettingsPage.html#a9c4eefa80318dea12a51165f60503af1',1,'SettingsPage']]],
+  ['embeddingposted_2',['embeddingPosted',['../classSupabaseClient.html#a16442fbf25c7340229b0bc1f764f2d11',1,'SupabaseClient']]],
+  ['embeddingpostfailed_3',['embeddingPostFailed',['../classSupabaseClient.html#a4ae005ab211457ce5633d17b43e2abb9',1,'SupabaseClient']]],
+  ['embeddingsfetched_4',['embeddingsFetched',['../classSupabaseClient.html#a1001d45e39fb2be0a8f83b370e699e2d',1,'SupabaseClient']]],
+  ['embeddingsfetchfailed_5',['embeddingsFetchFailed',['../classSupabaseClient.html#afe01579b9ae65418653f19fef29d0f7f',1,'SupabaseClient']]],
+  ['embeddinguploaded_6',['embeddingUploaded',['../classServerSyncManager.html#a182504fe9fecf35a96340d248f3920be',1,'ServerSyncManager']]],
+  ['embeddinguploadfailed_7',['embeddingUploadFailed',['../classServerSyncManager.html#a5c2822be81dfb2799cee1bca19edec5d',1,'ServerSyncManager']]],
+  ['enableaudio_8',['enableaudio',['../classCameraManager.html#a612d03b567fb855bb81cea3d3a8c9080',1,'CameraManager::enableAudio()'],['../classRTSPCamera.html#ad0f7b11abb8d5d9ae353c5313eadc35c',1,'RTSPCamera::enableAudio()']]],
+  ['enqueuedetections_9',['enqueueDetections',['../classServerSyncManager.html#a371e6169121111a27451f6777671b3d2',1,'ServerSyncManager']]],
+  ['enqueueface_10',['enqueueFace',['../classFaceAlertController.html#a953ee1fba289fee66fb6cc0a76982c2c',1,'FaceAlertController']]],
+  ['ensureauthenticated_11',['ensureAuthenticated',['../classServerSyncManager.html#a2ac7bd12985be346015e6ad93667f6a1',1,'ServerSyncManager']]],
+  ['ensureavatarfetched_12',['ensureAvatarFetched',['../classFaceDatabasePage.html#a1202713874553c66e6c5ee5036a10d66',1,'FaceDatabasePage']]],
+  ['ensurecameraregistered_13',['ensureCameraRegistered',['../classAnalyticsPage.html#a1866036efe6802169452d125985b284e',1,'AnalyticsPage']]],
+  ['ensureffmpeginitialized_14',['ensureFFmpegInitialized',['../classFFVideoDecoder.html#a489df72abf3a55880d02d6cca7ed88f8',1,'FFVideoDecoder']]],
+  ['ensureremoteavatar_15',['ensureRemoteAvatar',['../classFace3DViewerPage.html#aed64008c3d16c623b139018ce75b5da2',1,'Face3DViewerPage']]],
+  ['enterevent_16',['enterevent',['../classFramelessWindow.html#a61a3b53d8bf3552435f63990d26f892e',1,'FramelessWindow::enterEvent()'],['../classFramelessDialog.html#a195b79e1ae714f3aa43cdeb04250ffec',1,'FramelessDialog::enterEvent()']]],
+  ['errormessage_17',['errorMessage',['../classServerSyncManager.html#ae58ad92a4b1dd91ea79d42efa03cd6f3',1,'ServerSyncManager']]],
+  ['erroroccurred_18',['errorOccurred',['../classFFVideoDecoder.html#a28034bf04b733780a95af35e26132198',1,'FFVideoDecoder']]],
+  ['eventfilter_19',['eventfilter',['../classFramelessWindow.html#ab4cf4ba20e7b1edb942d0d7b61ceda92',1,'FramelessWindow::eventFilter()'],['../classFramelessDialog.html#abeed89217e905c3b05badddf84fe3d07',1,'FramelessDialog::eventFilter()']]],
+  ['eventposted_20',['eventPosted',['../classSupabaseClient.html#a3b98774bb57de43d49d040842090fd7f',1,'SupabaseClient']]],
+  ['eventpostfailed_21',['eventPostFailed',['../classSupabaseClient.html#afffa4f1321c24632d66eda2c59363755',1,'SupabaseClient']]],
+  ['exec_22',['exec',['../classFramelessMessageBox.html#a96b844a90dfe9135de76f68d480399f6',1,'FramelessMessageBox']]]
+];

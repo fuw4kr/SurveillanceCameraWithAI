@@ -1,0 +1,27 @@
+var searchData=
+[
+  ['lasterror_0',['lastError',['../classFaceReconstructionModel.html#a8bd3d3db4246b1c249b2330ff5887083',1,'FaceReconstructionModel']]],
+  ['latestmat_1',['latestMat',['../classRTSPCamera.html#aaea73f2733478b512f1481e6fe05db77',1,'RTSPCamera']]],
+  ['leaveevent_2',['leaveevent',['../classFramelessWindow.html#a180a44c0f32de4bff32bca8b12a3fdd7',1,'FramelessWindow::leaveEvent()'],['../classFramelessDialog.html#a983aa2385d505a4c3c141596ea9eee07',1,'FramelessDialog::leaveEvent()']]],
+  ['listavailablecameras_3',['listAvailableCameras',['../classCameraManager.html#a783602e8b8e3db0a6c23ca00b3fe631a',1,'CameraManager']]],
+  ['listfaceprofiles_4',['listFaceProfiles',['../classAIProcessor.html#ae61e4060d81f65cc62a881e9a92d2f25',1,'AIProcessor']]],
+  ['load_5',['load',['../structModelSettings.html#a564c2ffa15c686f6f8f6b90bcfbdb1aa',1,'ModelSettings']]],
+  ['loadconfig_6',['loadConfig',['../classServerSyncManager.html#a61569c699543f9071d71852934f2d599',1,'ServerSyncManager']]],
+  ['loaddetectionmodel_7',['loadDetectionModel',['../classMainWindow.html#a3cddb20da90c6d5243c0bd2feeea7585',1,'MainWindow']]],
+  ['loadembeddingmodel_8',['loadEmbeddingModel',['../classMainWindow.html#a94a2a5d2c8fe38d9186ee232f8250fc6',1,'MainWindow']]],
+  ['loadembedmodel_9',['loadEmbedModel',['../classAIProcessor.html#af12d2286c97c67b155f58595f73a482d',1,'AIProcessor']]],
+  ['loadembedmodelasync_10',['loadEmbedModelAsync',['../classAIProcessor.html#a7d5941944bdc205f34a9ad9006081ab8',1,'AIProcessor']]],
+  ['loadfacemodel_11',['loadFaceModel',['../classAIProcessor.html#a69fa633ced6a5692a992f6f3ea98debe',1,'AIProcessor']]],
+  ['loadfacemodelasync_12',['loadFaceModelAsync',['../classAIProcessor.html#a4149db817aaa7e0aa1f589a30b0804d4',1,'AIProcessor']]],
+  ['loadknownembeddings_13',['loadKnownEmbeddings',['../classAIProcessor.html#a5323f994e0ad1dc895b03c20aa6012ae',1,'AIProcessor']]],
+  ['loadmodel_14',['loadmodel',['../classAIProcessorONNX.html#a5cdcf28ee865d6c6ae66dcbebb0f5f4a',1,'AIProcessorONNX::loadModel()'],['../classFaceReconstructionModel.html#acddc13ffbfcbb003fb90fc5b0cdcb3fb',1,'FaceReconstructionModel::loadModel()']]],
+  ['loadobjectmodel_15',['loadObjectModel',['../classAIProcessor.html#a586f966ba592ac9e3715d1daa08d29a5',1,'AIProcessor']]],
+  ['loadobjectmodelasync_16',['loadObjectModelAsync',['../classAIProcessor.html#a101761955322d15481cd49dfd7344263',1,'AIProcessor']]],
+  ['loadstylesheet_17',['loadStylesheet',['../classMainWindow.html#a9d9189f33eba34378bb3f468ba8b905a',1,'MainWindow']]],
+  ['loadthemestyles_18',['loadThemeStyles',['../classMainWindow.html#a9df955fc9454cc9fe30e3fe736b5657e',1,'MainWindow']]],
+  ['locatemodel_19',['locateModel',['../classFace3DViewerPage.html#a73e300a6ab84aa6e7afa4a777e6026b6',1,'Face3DViewerPage']]],
+  ['logfilepath_20',['logFilePath',['../namespaceAppLogger.html#ace0c32b2729dbb1ff320e7eca114ec0a',1,'AppLogger']]],
+  ['login_21',['login',['../classSupabaseClient.html#af2c24aa0b72bf821aa6188d00106f19b',1,'SupabaseClient']]],
+  ['loginfinished_22',['loginFinished',['../classSupabaseClient.html#a4b6d414a2df9ecdcbab7f5da303e2dd8',1,'SupabaseClient']]],
+  ['loginwindow_23',['LoginWindow',['../classLoginWindow.html#aa4c04d26b299de00156bbf3c32b2a082',1,'LoginWindow']]]
+];

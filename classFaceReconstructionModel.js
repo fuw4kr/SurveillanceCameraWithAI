@@ -1,0 +1,27 @@
+var classFaceReconstructionModel =
+[
+    [ "FaceReconstructionModel", "classFaceReconstructionModel.html#ad3f8dc8b3b4ba432ddb57079a8d10fa3", null ],
+    [ "inputResolution", "classFaceReconstructionModel.html#a79cf785603366cffbcdf427a28925de2", null ],
+    [ "isLoaded", "classFaceReconstructionModel.html#ac28b005865b43683dfbd72bd4c99ae69", null ],
+    [ "lastError", "classFaceReconstructionModel.html#a8bd3d3db4246b1c249b2330ff5887083", null ],
+    [ "loadModel", "classFaceReconstructionModel.html#acddc13ffbfcbb003fb90fc5b0cdcb3fb", null ],
+    [ "parseOutput", "classFaceReconstructionModel.html#a8ae02ee548407b4aace7937e106a9394", null ],
+    [ "preprocess", "classFaceReconstructionModel.html#a4d91a89dc16bef3ca8c27612f385e36c", null ],
+    [ "reconstruct", "classFaceReconstructionModel.html#a3b27a5bf5011686022dd3d969eb46203", null ],
+    [ "inputBuffer", "classFaceReconstructionModel.html#a1f6b1a41ff26c5e71b1dec8ba9fb7a74", null ],
+    [ "inputChannels", "classFaceReconstructionModel.html#aa7d75d74c2ca821d7f4cb208836e73f9", null ],
+    [ "inputHeight", "classFaceReconstructionModel.html#aa691442ea1668499048c851f1a55022d", null ],
+    [ "inputName", "classFaceReconstructionModel.html#a115d4343f7d103578b5f061cba04112f", null ],
+    [ "inputRunShape", "classFaceReconstructionModel.html#a338fba3be59f854193c405525c8d8d25", null ],
+    [ "inputShape", "classFaceReconstructionModel.html#a528b577d89d387d66cd7656db4b668a9", null ],
+    [ "inputTensorSize", "classFaceReconstructionModel.html#ae4bb081c44b082ddf9613cb4a80d179b", null ],
+    [ "inputWidth", "classFaceReconstructionModel.html#ae6c63c4b3dca5c9a5e5fd4e9982a1afd", null ],
+    [ "lastErrorMessage", "classFaceReconstructionModel.html#addd08eff9a911414d8bf91a25cb32b0c", null ],
+    [ "modelLoaded", "classFaceReconstructionModel.html#a762a4c36a5ea767378a6f3e59a364542", null ],
+    [ "outputName", "classFaceReconstructionModel.html#a844450ac0fcaf473ee652ebccb23c13d", null ],
+    [ "outputShape", "classFaceReconstructionModel.html#a0713517453cb722f7b8c5f2fb4dcb56f", null ],
+    [ "outputTensorSize", "classFaceReconstructionModel.html#a25181dcf4a478a8d0fcad14bd3f315b3", null ],
+    [ "session", "classFaceReconstructionModel.html#a7b842f1577b421af56fe098ee9699602", null ],
+    [ "sessionMutex", "classFaceReconstructionModel.html#a5de75fcb0aefeaa5b462cade3e4e0b97", null ],
+    [ "sessionOptions", "classFaceReconstructionModel.html#a19339b35d344aa566b3a6efee0fd3569", null ]
+];

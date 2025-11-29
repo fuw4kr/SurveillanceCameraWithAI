@@ -1,0 +1,22 @@
+var searchData=
+[
+  ['m_5fuiinitialized_0',['m_uiinitialized',['../classFramelessDialog.html#a6a6623c18c093b26c54b086e52f5d735',1,'FramelessDialog::m_uiInitialized'],['../classFramelessWindow.html#a000cae9cc43a1b25474462297946b544',1,'FramelessWindow::m_uiInitialized']]],
+  ['manualcredentialsprovided_1',['manualCredentialsProvided',['../classServerSyncManager.html#a8004f867ef047a814a6861384b025c77',1,'ServerSyncManager']]],
+  ['matchedthisframe_2',['matchedThisFrame',['../structAIProcessor_1_1FaceTrack.html#a8281671ca84b43a043c859ff9baa1554',1,'AIProcessor::FaceTrack']]],
+  ['maxeventattempts_3',['maxEventAttempts',['../classServerSyncManager.html#aff67d3a33c26ffda1f15147ed7626d7c',1,'ServerSyncManager']]],
+  ['maxeventqueuesize_4',['maxEventQueueSize',['../classServerSyncManager.html#afdfa5b50ff79c55ee84cd29938c3f8b4',1,'ServerSyncManager']]],
+  ['maxrollingsamples_5',['maxRollingSamples',['../classAnalyticsPage.html#a116b42b5d80e4a8a65b20696a7ced8f5',1,'AnalyticsPage']]],
+  ['meshview_6',['meshView',['../classFace3DViewerPage.html#ae25ddc353896da31ba70e491bd1210d7',1,'Face3DViewerPage']]],
+  ['message_7',['message',['../structAuthResult.html#ad707ff652a4c6a42e37166d0dd781cba',1,'AuthResult']]],
+  ['messagelabel_8',['messageLabel',['../classFramelessMessageBox.html#a9c02068dbaf0fc9bac45af9604a9d1de',1,'FramelessMessageBox']]],
+  ['misscount_9',['missCount',['../structAIProcessor_1_1FaceTrack.html#ad26c9809678b1c33773da6ba7b0b2700',1,'AIProcessor::FaceTrack']]],
+  ['modelinfolabel_10',['modelInfoLabel',['../classMainWindow.html#a1b99b7d1bfa053ba32a1369637e19dde',1,'MainWindow']]],
+  ['modelloaded_11',['modelLoaded',['../classFaceReconstructionModel.html#a762a4c36a5ea767378a6f3e59a364542',1,'FaceReconstructionModel']]],
+  ['modelname_12',['modelName',['../structEmbeddingRecord.html#a2be13da834f581710a87c9205ebe7256',1,'EmbeddingRecord']]],
+  ['modelpath_13',['modelPath',['../structSettingsPage_1_1DetectionEntry.html#ad98900248fdad1403c492a4d44ccda4e',1,'SettingsPage::DetectionEntry']]],
+  ['modelready_14',['modelReady',['../classFace3DViewerPage.html#a6deebcc37f88737f45c59fd3beac3de8',1,'Face3DViewerPage']]],
+  ['modelsdir_15',['modelsDir',['../classSettingsPage.html#a7fa04d86c63ae5034f0aa27ff6bfd46b',1,'SettingsPage']]],
+  ['modelsdirectory_16',['modelsDirectory',['../classMainWindow.html#a06def3b660990ea4478c0062abbd07ff',1,'MainWindow']]],
+  ['modelsettings_17',['modelSettings',['../classMainWindow.html#a56bad6a3b843ebba7a5e16fdf16cc313',1,'MainWindow']]],
+  ['mutex_18',['mutex',['../classCameraManager.html#aba137d3ef5bcebac0ae1365710ffaee4',1,'CameraManager']]]
+];

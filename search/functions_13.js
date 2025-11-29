@@ -1,0 +1,26 @@
+var searchData=
+[
+  ['unknownfacedialog_0',['UnknownFaceDialog',['../classUnknownFaceDialog.html#a3701909cba554adef8931d93a017adab',1,'UnknownFaceDialog']]],
+  ['updateactivitychart_1',['updateActivityChart',['../classDashboardPage.html#a9431be1e99175b8c90810bb258f4cb31',1,'DashboardPage']]],
+  ['updatecamera_2',['updateCamera',['../classSupabaseClient.html#a844b09cd0c7aae96acccd03dd1a94094',1,'SupabaseClient']]],
+  ['updatecamerastatus_3',['updateCameraStatus',['../classServerSyncManager.html#ac783b3451715b49e1188b8799c0fce5d',1,'ServerSyncManager']]],
+  ['updatecursorshape_4',['updatecursorshape',['../classFramelessWindow.html#a27428ceb55ff99ac769489fc7d7cd53c',1,'FramelessWindow::updateCursorShape()'],['../classFramelessDialog.html#aa8616e4e4f9bf8998329cac9bd507dec',1,'FramelessDialog::updateCursorShape()']]],
+  ['updatedetailpanel_5',['updateDetailPanel',['../classFaceDatabasePage.html#ae96db14cc8217dddbeda9930958e7c99',1,'FaceDatabasePage']]],
+  ['updatedetections_6',['updateDetections',['../classAnalyticsPage.html#a7b54b4582c17e399cd936f913b3a8fef',1,'AnalyticsPage']]],
+  ['updateframe_7',['updateframe',['../classCameraViewWidget.html#a342e446570ff196fcd216a9f0b34150e',1,'CameraViewWidget::updateFrame(const QImage &amp;img)'],['../classCameraViewWidget.html#ab24461dd8940e20639c7239cf5ca3dbe',1,'CameraViewWidget::updateFrame(const QImage &amp;image)']]],
+  ['updategrid_8',['updateGrid',['../classCamerasPage.html#ac0523f751c6d8fe37a56838c2d9b2ba1',1,'CamerasPage']]],
+  ['updateinsightcards_9',['updateInsightCards',['../classAnalyticsPage.html#a2f22ec2e5692d1123f45280c6984bea4',1,'AnalyticsPage']]],
+  ['updatemaximizeicon_10',['updateMaximizeIcon',['../classMainWindow.html#a5636406ade45d7eafa80fd1128a0b361',1,'MainWindow']]],
+  ['updatemodelinfolabel_11',['updateModelInfoLabel',['../classMainWindow.html#a9e2f5bab1679924507e314b733b54ce9',1,'MainWindow']]],
+  ['updatepathlabels_12',['updatePathLabels',['../classSettingsPage.html#ab58ca7e8034cddf5b959aa69cb738b76',1,'SettingsPage']]],
+  ['updateperson_13',['updatePerson',['../classSupabaseClient.html#a82b24b4f7afaad5d64f01ecd6501a03d',1,'SupabaseClient']]],
+  ['updatepersonrole_14',['updatePersonRole',['../classServerSyncManager.html#afa800289a4e2b39e4b1e7c44d2c2a04b',1,'ServerSyncManager']]],
+  ['updatepreviewpixmap_15',['updatePreviewPixmap',['../classCameraViewWidget.html#afe13cc33025cb1e4f0b1abf2f29990e2',1,'CameraViewWidget']]],
+  ['updaterecentevents_16',['updateRecentEvents',['../classDashboardPage.html#ab433c65d7f880cb494eb523bc2c196ac',1,'DashboardPage']]],
+  ['updateremotelistview_17',['updateRemoteListView',['../classCamerasPage.html#a5d15c7a0261232b5838bbba607aaa838',1,'CamerasPage']]],
+  ['updatestats_18',['updatestats',['../classAnalyticsPage.html#ad6a7515795dfd709695370f056d5181f',1,'AnalyticsPage::updateStats()'],['../classDashboardPage.html#a79ecf317756435e10fcf7bd284d7341d',1,'DashboardPage::updateStats()']]],
+  ['updatestatus_19',['updateStatus',['../classLoginWindow.html#af49d9c1478f47ea51daf38e2c8c76788',1,'LoginWindow']]],
+  ['uploadembedding_20',['uploadEmbedding',['../classServerSyncManager.html#a7213f35b8abb20ee64ad4e2dd3dd5e5a',1,'ServerSyncManager']]],
+  ['uploadpersonavatar_21',['uploadpersonavatar',['../classServerSyncManager.html#a93f78c7c4fb3451528b29b58eda812b5',1,'ServerSyncManager::uploadPersonAvatar()'],['../classSupabaseClient.html#a7f6e504bc6bdbb8c51356847cfa7326d',1,'SupabaseClient::uploadPersonAvatar()']]],
+  ['url_22',['url',['../classRTSPCamera.html#a50d2d7828bf7e4af1d06a60cfc7a6454',1,'RTSPCamera']]]
+];

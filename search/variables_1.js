@@ -1,0 +1,19 @@
+var searchData=
+[
+  ['baselinehourlycounts_0',['baselineHourlyCounts',['../classAnalyticsPage.html#acc4e48f6ba31d85d80cdbfc0e7f1a24f',1,'AnalyticsPage']]],
+  ['baselineset_1',['baselineSet',['../classAnalyticsPage.html#a1aecf19273be2686a593d85f0d61b1ff',1,'AnalyticsPage']]],
+  ['baseurl_2',['baseUrl',['../classSupabaseClient.html#a3206415372bdcc6613da7bfc5d75758b',1,'SupabaseClient']]],
+  ['bordercolor_3',['borderColor',['../classSnapPreviewWindow.html#a2968207f60f79f2ef2671a3b24ac9e82',1,'SnapPreviewWindow']]],
+  ['btnaddindex_4',['btnAddIndex',['../classCamerasPage.html#a948ed97ba859d94fbf221ac7270cfb4d',1,'CamerasPage']]],
+  ['btnaddrtsp_5',['btnAddRtsp',['../classCamerasPage.html#a95ccf600ac3acd0443915a99a78d45f4',1,'CamerasPage']]],
+  ['btnclose_6',['btnClose',['../classMainWindow.html#ad2feb95be9b9844c2390df46673a3e2b',1,'MainWindow']]],
+  ['btnmaximize_7',['btnMaximize',['../classMainWindow.html#a0502530fbc44e81a3c7426e55498a2f9',1,'MainWindow']]],
+  ['btnminimize_8',['btnMinimize',['../classMainWindow.html#a643e64320eb90057bbf08be606e46986',1,'MainWindow']]],
+  ['btnnext_9',['btnNext',['../classCamerasPage.html#a6db61ad1fe213743251a7d70b289da6b',1,'CamerasPage']]],
+  ['btnprev_10',['btnPrev',['../classCamerasPage.html#a7a711f06b7a3c7da857794439ac339a9',1,'CamerasPage']]],
+  ['btnsettings_11',['btnSettings',['../classMainWindow.html#a82104564f8ef3b8548fc6dd6951344af',1,'MainWindow']]],
+  ['btnsync_12',['btnSync',['../classMainWindow.html#aaa6c936afd515c6bf7ed981fd3f197b6',1,'MainWindow']]],
+  ['btnthemetoggle_13',['btnThemeToggle',['../classMainWindow.html#a6fada2c1d99a12a94361d0756a6a10c5',1,'MainWindow']]],
+  ['btntoggle_14',['btnToggle',['../classCameraViewWidget.html#a8efb4445d9ab5c267d0205813a8b125d',1,'CameraViewWidget']]],
+  ['busy_15',['busy',['../classUnknownFaceDialog.html#ace46991a780d4fd03875b2aa180d44b2',1,'UnknownFaceDialog::busy'],['../classLoginWindow.html#a9a042e290b44c706eb14dcb187e661a1',1,'LoginWindow::busy']]]
+];

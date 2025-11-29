@@ -1,0 +1,23 @@
+var searchData=
+[
+  ['id_0',['id',['../classRTSPCamera.html#a900f566eb535d0fe50cf901385c96cdc',1,'RTSPCamera']]],
+  ['imagetomat_1',['imageToMat',['../classAIProcessor.html#aba3d8535a4fd6ba8b2725fd0ee034113',1,'AIProcessor']]],
+  ['inferobjects_2',['inferObjects',['../classAIProcessor.html#ab35427a3859abd21cf6e79001f605e59',1,'AIProcessor']]],
+  ['information_3',['information',['../classFramelessMessageBox.html#aeb068d14f2cef1ea2ad3f4c99539af09',1,'FramelessMessageBox']]],
+  ['initialize_4',['initialize',['../namespaceAppLogger.html#acebca01f9fa1cf52fac7282423452330',1,'AppLogger']]],
+  ['initializeserversync_5',['initializeServerSync',['../classMainWindow.html#a7d9f812fdd40e3b35aebce2d11503de5',1,'MainWindow']]],
+  ['inputresolution_6',['inputResolution',['../classFaceReconstructionModel.html#a79cf785603366cffbcdf427a28925de2',1,'FaceReconstructionModel']]],
+  ['intersectionoverunion_7',['intersectionOverUnion',['../classAIProcessor.html#ab761303e3372f0057b8b1b3a3007e563',1,'AIProcessor']]],
+  ['invalidaterecognitioncache_8',['invalidateRecognitionCache',['../classAIProcessor.html#a604e4d2406449288c20d2bf92ac15fac',1,'AIProcessor']]],
+  ['isauthenticated_9',['isAuthenticated',['../classSupabaseClient.html#addbf6ebf21f5e92ec0d8a39e3ddcc256',1,'SupabaseClient']]],
+  ['iscameraopen_10',['isCameraOpen',['../classCameraManager.html#a757bfc98e3fc5bd0c51221af83b67c55',1,'CameraManager']]],
+  ['isdetectionmodel_11',['isDetectionModel',['../classSettingsPage.html#a19a65d065a69a6e95742a5ded5d23d75',1,'SettingsPage']]],
+  ['isloaded_12',['isloaded',['../classAIProcessorONNX.html#a097bcd8609d71fb2cdfdb30022c01f51',1,'AIProcessorONNX::isLoaded()'],['../classFaceReconstructionModel.html#ac28b005865b43683dfbd72bd4c99ae69',1,'FaceReconstructionModel::isLoaded()']]],
+  ['islocalsource_13',['isLocalSource',['../classRTSPCamera.html#a1536c3b8afef2d1255e7cdae6e5c511e',1,'RTSPCamera']]],
+  ['isonline_14',['isOnline',['../classRTSPCamera.html#a8f924bab501126f3da4ef82608c8e41d',1,'RTSPCamera']]],
+  ['isrecentlyprompted_15',['isRecentlyPrompted',['../classFaceAlertController.html#a67c9a9fcbe1694d59bba9156eb9ff608',1,'FaceAlertController']]],
+  ['isrecognitionratelimited_16',['isRecognitionRateLimited',['../classAIProcessor.html#a07e414750689fc8c6481336ed100862a',1,'AIProcessor']]],
+  ['isrecognitionready_17',['isRecognitionReady',['../classAIProcessor.html#a3dbf36e804511dc3a2fa355ba3927dfe',1,'AIProcessor']]],
+  ['isrunning_18',['isRunning',['../classFFVideoDecoder.html#a324f14c8d4d4c6343c8e3340af5f6f69',1,'FFVideoDecoder']]],
+  ['isvalid_19',['isvalid',['../structPersonRecord.html#a8c3a8717d43bf237eca80f03b1077b73',1,'PersonRecord::isValid()'],['../structLoginSession.html#ae9c72e4725a14150517f44f844d8cd9f',1,'LoginSession::isValid()']]]
+];

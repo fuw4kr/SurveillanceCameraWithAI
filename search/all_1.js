@@ -1,0 +1,28 @@
+var searchData=
+[
+  ['baselinehourlycounts_0',['baselineHourlyCounts',['../classAnalyticsPage.html#acc4e48f6ba31d85d80cdbfc0e7f1a24f',1,'AnalyticsPage']]],
+  ['baselineset_1',['baselineSet',['../classAnalyticsPage.html#a1aecf19273be2686a593d85f0d61b1ff',1,'AnalyticsPage']]],
+  ['baseurl_2',['baseurl',['../classSupabaseClient.html#a3206415372bdcc6613da7bfc5d75758b',1,'SupabaseClient::baseUrl'],['../classServerSyncManager.html#a0a47d1209de055213d2c5f3ebc49adb0',1,'ServerSyncManager::baseUrl()']]],
+  ['bordercolor_3',['borderColor',['../classSnapPreviewWindow.html#a2968207f60f79f2ef2671a3b24ac9e82',1,'SnapPreviewWindow']]],
+  ['bottom_4',['bottom',['../classFramelessWindow.html#a8cb4048a8db1e8b62efd82c117d9d782a70f4ccdebd49ea0062c83102dbf4c573',1,'FramelessWindow::Bottom'],['../classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384a146aa303fe8b3525284d5cb0b8b3131c',1,'FramelessDialog::Bottom']]],
+  ['bottomleft_5',['bottomleft',['../classFramelessWindow.html#a8cb4048a8db1e8b62efd82c117d9d782a228eaaf0679c9b83024c190ddb181311',1,'FramelessWindow::BottomLeft'],['../classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384a2d2b95705535d6a887d4a1df10c61ead',1,'FramelessDialog::BottomLeft']]],
+  ['bottomright_6',['bottomright',['../classFramelessWindow.html#a8cb4048a8db1e8b62efd82c117d9d782ae23dcf38ddc4e27375ef820adb682c7f',1,'FramelessWindow::BottomRight'],['../classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384a876bebf0cf17edb1a4efebf650bad722',1,'FramelessDialog::BottomRight']]],
+  ['btnaddindex_7',['btnAddIndex',['../classCamerasPage.html#a948ed97ba859d94fbf221ac7270cfb4d',1,'CamerasPage']]],
+  ['btnaddrtsp_8',['btnAddRtsp',['../classCamerasPage.html#a95ccf600ac3acd0443915a99a78d45f4',1,'CamerasPage']]],
+  ['btnclose_9',['btnClose',['../classMainWindow.html#ad2feb95be9b9844c2390df46673a3e2b',1,'MainWindow']]],
+  ['btnmaximize_10',['btnMaximize',['../classMainWindow.html#a0502530fbc44e81a3c7426e55498a2f9',1,'MainWindow']]],
+  ['btnminimize_11',['btnMinimize',['../classMainWindow.html#a643e64320eb90057bbf08be606e46986',1,'MainWindow']]],
+  ['btnnext_12',['btnNext',['../classCamerasPage.html#a6db61ad1fe213743251a7d70b289da6b',1,'CamerasPage']]],
+  ['btnprev_13',['btnPrev',['../classCamerasPage.html#a7a711f06b7a3c7da857794439ac339a9',1,'CamerasPage']]],
+  ['btnsettings_14',['btnSettings',['../classMainWindow.html#a82104564f8ef3b8548fc6dd6951344af',1,'MainWindow']]],
+  ['btnsync_15',['btnSync',['../classMainWindow.html#aaa6c936afd515c6bf7ed981fd3f197b6',1,'MainWindow']]],
+  ['btnthemetoggle_16',['btnThemeToggle',['../classMainWindow.html#a6fada2c1d99a12a94361d0756a6a10c5',1,'MainWindow']]],
+  ['btntoggle_17',['btnToggle',['../classCameraViewWidget.html#a8efb4445d9ab5c267d0205813a8b125d',1,'CameraViewWidget']]],
+  ['buildbaselinecurve_18',['buildBaselineCurve',['../classAnalyticsPage.html#a76fa0d6853db8af3622f977c16ddabb0',1,'AnalyticsPage']]],
+  ['buildfacepixmap_19',['buildFacePixmap',['../classFaceDatabasePage.html#ae2c799b14dd2c9bc3f459c13383420b3',1,'FaceDatabasePage']]],
+  ['buildinitialspixmap_20',['buildInitialsPixmap',['../classFace3DViewerPage.html#ab9b6e7dbaf2cc40396caa21bf6d015ff',1,'Face3DViewerPage']]],
+  ['buildpreviewpixmap_21',['buildPreviewPixmap',['../classFace3DViewerPage.html#af583068034f1e6f44bfd07d0714fc8c5',1,'Face3DViewerPage']]],
+  ['buildui_22',['buildui',['../classLoginWindow.html#a5144c2592dd0c6d6b4a40a7bf5f042e1',1,'LoginWindow::buildUi()'],['../classAnalyticsPage.html#adefab9f9fbcf35acfd74564a3c81f52b',1,'AnalyticsPage::buildUi()'],['../classFace3DViewerPage.html#a6fcda437a55fc05bd50191f636e4f5e9',1,'Face3DViewerPage::buildUi()'],['../classSettingsPage.html#a1674fa687ec2a9441aa46a824996a73c',1,'SettingsPage::buildUi()']]],
+  ['busiesthour_23',['busiestHour',['../classAnalyticsPage.html#adf187b39f1d8b63d82c8e6f7a743dfab',1,'AnalyticsPage']]],
+  ['busy_24',['busy',['../classUnknownFaceDialog.html#ace46991a780d4fd03875b2aa180d44b2',1,'UnknownFaceDialog::busy'],['../classLoginWindow.html#a9a042e290b44c706eb14dcb187e661a1',1,'LoginWindow::busy']]]
+];

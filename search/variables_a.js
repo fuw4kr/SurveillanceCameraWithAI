@@ -1,0 +1,24 @@
+var searchData=
+[
+  ['label_0',['label',['../structAIProcessor_1_1RecognitionCacheEntry.html#a281fcd670d838627cf95fc669e469523',1,'AIProcessor::RecognitionCacheEntry::label'],['../structSettingsPage_1_1DetectionEntry.html#a4e13ee5fd1660afb7ae8348649e13ea9',1,'SettingsPage::DetectionEntry::label'],['../structSettingsPage_1_1ModelEntry.html#aa89f749c270badcd8886c008ad539eb0',1,'SettingsPage::ModelEntry::label'],['../structDetection.html#abc6cf5b174e952ea429a4a1698d02066',1,'Detection::label']]],
+  ['lasterrormessage_1',['lastErrorMessage',['../classFaceReconstructionModel.html#addd08eff9a911414d8bf91a25cb32b0c',1,'FaceReconstructionModel']]],
+  ['lastframe_2',['lastFrame',['../classCameraViewWidget.html#a80d2d7632849486693a5060983e0b892',1,'CameraViewWidget']]],
+  ['lastframems_3',['lastFrameMs',['../classCameraViewWidget.html#acc83bb7077089c335ae049300aa3901e',1,'CameraViewWidget']]],
+  ['lastframetime_4',['lastFrameTime',['../classCameraViewWidget.html#a62dced38c83a52337c8c633bff82020d',1,'CameraViewWidget']]],
+  ['lastrect_5',['lastRect',['../classSnapPreviewWindow.html#a812c9f551a33d2864b44c40a84d174c7',1,'SnapPreviewWindow']]],
+  ['lastseen_6',['lastseen',['../structDetectionEventController_1_1ActiveEvent.html#a866afe14cf2d1faa6312d0cf349c7eb8',1,'DetectionEventController::ActiveEvent::lastSeen'],['../structPersonRecord.html#af3190e5963bc117a9af5500c330b2fd9',1,'PersonRecord::lastSeen'],['../structAttendanceRow.html#a99d631499d27e478704e7f5de2be6b81',1,'AttendanceRow::lastSeen']]],
+  ['lastsimilarity_7',['lastSimilarity',['../structAIProcessor_1_1FaceTrack.html#a9b24dd06748d077885a1b50781e1955b',1,'AIProcessor::FaceTrack']]],
+  ['lastsize_8',['lastSize',['../classFFVideoDecoder.html#abb4358c8e01f795a4aadd2c84699a67d',1,'FFVideoDecoder']]],
+  ['latestframe_9',['latestFrame',['../classFFVideoDecoder.html#a14f8f523e27e18f7809d04c3d5bd1b2d',1,'FFVideoDecoder']]],
+  ['latestrawframe_10',['latestRawFrame',['../structCamerasPage_1_1CameraProcessingState.html#a196b28d9e9dc357c746ff1ee330e0b8c',1,'CamerasPage::CameraProcessingState']]],
+  ['lblaistatus_11',['lblAIStatus',['../classDashboardPage.html#ad9591dd3d09953e7785025ef9defe629',1,'DashboardPage']]],
+  ['lblalerts_12',['lblAlerts',['../classDashboardPage.html#a6630272bd1899c01a50e6ccba78bd668',1,'DashboardPage']]],
+  ['lblcameras_13',['lblCameras',['../classDashboardPage.html#af4ced85f9ca5e97b9ed1f06011bd0d4f',1,'DashboardPage']]],
+  ['lbldetections_14',['lblDetections',['../classDashboardPage.html#a95a03240bc97489df1af01008b890878',1,'DashboardPage']]],
+  ['lightstylesheet_15',['lightStylesheet',['../classMainWindow.html#a6765000e34b83c61b35613edf37f912b',1,'MainWindow']]],
+  ['listmodes_16',['listModes',['../classMainWindow.html#a3dc2c27f2c0d7f35f3545c32b991df35',1,'MainWindow']]],
+  ['loadimagebutton_17',['loadImageButton',['../classFace3DViewerPage.html#a26f052cce327f43857eb8c7d51e45033',1,'Face3DViewerPage']]],
+  ['location_18',['location',['../structCameraRecord.html#aeb742f43a3f6cb8668b2ff9c277193c1',1,'CameraRecord']]],
+  ['loginbutton_19',['loginButton',['../classLoginWindow.html#a2d3e6bf224cd85677e10355cd68a2bd5',1,'LoginWindow']]],
+  ['logininprogress_20',['loginInProgress',['../classServerSyncManager.html#a84a7909427648377c87fe62f9a133629',1,'ServerSyncManager']]]
+];

@@ -1,0 +1,38 @@
+var classFramelessDialog =
+[
+    [ "ResizeRegion", "classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384", [
+      [ "None", "classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384ace043390450439f13b1847b4806c5af6", null ],
+      [ "Left", "classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384afd5a5ffeb4e7d404a02a4b843bc20dbc", null ],
+      [ "Right", "classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384ad33f31ea28806d58347a634a249408e5", null ],
+      [ "Top", "classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384a62b2da7f910af455aa14f17f3d7a81b8", null ],
+      [ "Bottom", "classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384a146aa303fe8b3525284d5cb0b8b3131c", null ],
+      [ "TopLeft", "classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384a0eb6de7de1b91f09278c156f2c7fd9fc", null ],
+      [ "TopRight", "classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384a3af635a6fe01daa78821dd95686ff0c3", null ],
+      [ "BottomLeft", "classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384a2d2b95705535d6a887d4a1df10c61ead", null ],
+      [ "BottomRight", "classFramelessDialog.html#aca0499ef7a31f5bd350c0bbb4a967384a876bebf0cf17edb1a4efebf650bad722", null ]
+    ] ],
+    [ "FramelessDialog", "classFramelessDialog.html#abcd5e7958df36b10de902f6ce545f869", null ],
+    [ "~FramelessDialog", "classFramelessDialog.html#aa70867330a6725edf4dc806378564d42", null ],
+    [ "applyShadowEffect", "classFramelessDialog.html#a6244d40c9a3ab821437e1fc27867b52a", null ],
+    [ "closeEvent", "classFramelessDialog.html#a5fa7ed7427277a295c8f84c2656faaba", null ],
+    [ "detectResizeRegion", "classFramelessDialog.html#aa5d921d37b7c077adeb84daee884c675", null ],
+    [ "enterEvent", "classFramelessDialog.html#a195b79e1ae714f3aa43cdeb04250ffec", null ],
+    [ "eventFilter", "classFramelessDialog.html#abeed89217e905c3b05badddf84fe3d07", null ],
+    [ "leaveEvent", "classFramelessDialog.html#a983aa2385d505a4c3c141596ea9eee07", null ],
+    [ "mouseMoveEvent", "classFramelessDialog.html#aa54fb42aa49d7e1046697fe9232db603", null ],
+    [ "mousePressEvent", "classFramelessDialog.html#aa2212894229e4f928e13bbb1f05c0d7e", null ],
+    [ "mouseReleaseEvent", "classFramelessDialog.html#a6193186efb68a4fd2d8ef39655e19d91", null ],
+    [ "resizeEvent", "classFramelessDialog.html#a7ad4d35e018564dddee103e2b417c85e", null ],
+    [ "setResizeEnabled", "classFramelessDialog.html#ada54f4009a812bd2126c56d26fa2f50f", null ],
+    [ "setShadowEnabled", "classFramelessDialog.html#ab8e80c367998cf1f65c16c8426530658", null ],
+    [ "showEvent", "classFramelessDialog.html#aed46c17b48c9aed8249aada0086b5ee2", null ],
+    [ "showEventFade", "classFramelessDialog.html#a1e7133742be8b26e98e1d00594b863ec", null ],
+    [ "updateCursorShape", "classFramelessDialog.html#aa8616e4e4f9bf8998329cac9bd507dec", null ],
+    [ "currentResizeRegion", "classFramelessDialog.html#ac18fec3e657e6105a80a4c0211c0d066", null ],
+    [ "dragOffset", "classFramelessDialog.html#a1451c94d6d3d92ea1894d38cac249567", null ],
+    [ "isDragging", "classFramelessDialog.html#a84514d35590923beee1233b3477ab586", null ],
+    [ "isResizing", "classFramelessDialog.html#a7ab7d07525fda20b7c0c1107a4e021c2", null ],
+    [ "m_uiInitialized", "classFramelessDialog.html#a6a6623c18c093b26c54b086e52f5d735", null ],
+    [ "resizeEnabled", "classFramelessDialog.html#a241e960bd2ecdfcdf17beb503a163b1d", null ],
+    [ "shadowEnabled", "classFramelessDialog.html#a7073005a98c83dae441e80b9683aaccb", null ]
+];
