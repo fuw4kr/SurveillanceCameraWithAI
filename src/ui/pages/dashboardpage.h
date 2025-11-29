@@ -15,6 +15,7 @@
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QValueAxis>
+#include <QJsonObject>
 
 class DashboardPage : public QWidget
 {
@@ -22,6 +23,7 @@ class DashboardPage : public QWidget
 public:
     explicit DashboardPage(QWidget* parent = nullptr);
 
+    void applyDashboardData(const QJsonObject& json);
     void updateStats(int cameras, int detections, int alerts, bool aiActive);
     void updateActivityChart(const QList<int>& values); // 24 points = hours
     void updateRecentEvents(const QList<QStringList>& rows); // {{"11:25","Unknown face","Cam#2"}, ...}

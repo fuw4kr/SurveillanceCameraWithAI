@@ -6,7 +6,8 @@
 #include "DashboardPage.h"
 #include <QHeaderView>
 #include <QFont>
-#include <random>
+#include <QJsonArray>
+#include <algorithm>
 
 DashboardPage::DashboardPage(QWidget* parent)
     : QWidget(parent)
@@ -32,10 +33,10 @@ void DashboardPage::setupUi()
     auto* cardsLayout = new QHBoxLayout;
     cardsLayout->setSpacing(20);
 
-    lblCameras = new QLabel("4");
-    lblDetections = new QLabel("256");
-    lblAlerts = new QLabel("3");
-    lblAIStatus = new QLabel("Active");
+    lblCameras = new QLabel("0");
+    lblDetections = new QLabel("0");
+    lblAlerts = new QLabel("0");
+    lblAIStatus = new QLabel("Inactive");
 
     cardsLayout->addWidget(createCard("Active Cameras 📷", lblCameras, QColor("#3B82F6")));
     cardsLayout->addWidget(createCard("Detections Today 👁‍🗨", lblDetections, QColor("#10B981")));
@@ -120,12 +121,9 @@ void DashboardPage::setupChart()
     auto* series = new QLineSeries();
     series->setColor(QColor("#3B82F6"));
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dist(0, 50);
-
+    // initialize with zeros (24 hours)
     for (int i = 0; i < 24; ++i)
-        series->append(qreal(i), qreal(dist(gen)));
+        series->append(qreal(i), 0.0);
 
     auto* chart = new QChart();
     chart->addSeries(series);
@@ -156,7 +154,7 @@ void DashboardPage::setupChart()
 // === Table ===
 void DashboardPage::setupTable()
 {
-    tableEvents = new QTableWidget(5, 3);
+    tableEvents = new QTableWidget(0, 3);
     QStringList headers = { "Time", "Event", "Camera" };
     tableEvents->setHorizontalHeaderLabels(headers);
     tableEvents->verticalHeader()->hide();
@@ -165,23 +163,37 @@ void DashboardPage::setupTable()
     tableEvents->setAlternatingRowColors(true);
     tableEvents->horizontalHeader()->setStretchLastSection(true);
     tableEvents->setMinimumHeight(220);
-
-    // test data
-    QStringList events = {
-        "Unknown Face Detected",
-        "Motion Detected",
-        "Authorized Access",
-        "Unknown Face Detected",
-        "Camera #2 Offline"
-    };
-    for (int i = 0; i < 5; ++i) {
-        tableEvents->setItem(i, 0, new QTableWidgetItem(QString("12:%1").arg(10 + i)));
-        tableEvents->setItem(i, 1, new QTableWidgetItem(events[i]));
-        tableEvents->setItem(i, 2, new QTableWidgetItem(QString("Cam #%1").arg(i + 1)));
-    }
 }
 
 // === Data Updates ===
+void DashboardPage::applyDashboardData(const QJsonObject& json)
+{
+    updateStats(
+        json.value(QStringLiteral("cameras")).toInt(),
+        json.value(QStringLiteral("detectionsToday")).toInt(),
+        json.value(QStringLiteral("alerts")).toInt(),
+        json.value(QStringLiteral("aiActive")).toBool());
+
+    QList<int> series(24, 0);
+    const auto detectionsByHour = json.value(QStringLiteral("detectionsByHour")).toArray();
+    for (int i = 0; i < detectionsByHour.size() && i < series.size(); ++i)
+        series[i] = detectionsByHour.at(i).toInt();
+    updateActivityChart(series);
+
+    QList<QStringList> rows;
+    const auto recentEvents = json.value(QStringLiteral("recentEvents")).toArray();
+    rows.reserve(recentEvents.size());
+    for (const auto& ev : recentEvents) {
+        const auto o = ev.toObject();
+        rows.append({
+            o.value(QStringLiteral("time")).toString(),
+            o.value(QStringLiteral("event")).toString(),
+            o.value(QStringLiteral("camera")).toString()
+            });
+    }
+    updateRecentEvents(rows);
+}
+
 void DashboardPage::updateStats(int cameras, int detections, int alerts, bool aiActive)
 {
     lblCameras->setText(QString::number(cameras));
@@ -198,8 +210,20 @@ void DashboardPage::updateActivityChart(const QList<int>& values)
     if (!series) return;
 
     series->clear();
-    for (int i = 0; i < values.size(); ++i)
+    int maxVal = 0;
+    for (int i = 0; i < values.size(); ++i) {
+        maxVal = std::max(maxVal, values[i]);
         series->append(qreal(i), qreal(values[i]));
+    }
+
+    // adjust Y axis to current data range
+    if (!chart->axes(Qt::Vertical).isEmpty()) {
+        auto* axisY = qobject_cast<QValueAxis*>(chart->axes(Qt::Vertical).first());
+        if (axisY) {
+            const int upper = std::max(5, maxVal + 2);
+            axisY->setRange(0, upper);
+        }
+    }
 }
 
 void DashboardPage::updateRecentEvents(const QList<QStringList>& rows)
