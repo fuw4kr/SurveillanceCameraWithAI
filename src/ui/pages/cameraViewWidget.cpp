@@ -1,4 +1,7 @@
-﻿#include "CameraViewWidget.h"
+﻿/**
+ * @file cameraViewWidget.cpp
+ * @brief Implements the compact camera tile used within the cameras page.
+ */#include "CameraViewWidget.h"
 #include <QPixmap>
 #include <QHBoxLayout>
 #include <QDateTime>
@@ -128,3 +131,4 @@ void CameraViewWidget::checkActivity()
         setOffline(true);
     }
 }
+

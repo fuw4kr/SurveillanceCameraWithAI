@@ -1,6 +1,18 @@
 #ifndef FACEDATABASEPAGE_H
 #define FACEDATABASEPAGE_H
 
+/**
+ * @file faceDatabasePage.h
+ * @brief UI page for browsing and managing cloud-synced face profiles.
+ *
+ * Renders a gallery of known persons, supports search and selection, and shows
+ * detail cards with avatars and metadata retrieved via ServerSyncManager.
+ *
+ * @example
+ * auto* page = new FaceDatabasePage(sync, this);
+ * page->setRemotePersons(persons);
+ */
+
 #include <QPixmap>
 #include <QSize>
 #include <QString>
@@ -17,11 +29,23 @@ class ServerSyncManager;
 
 #include "../../core/ServerTypes.h"
 
+/**
+ * @brief Gallery-style page for viewing and editing face database entries.
+ */
 class FaceDatabasePage : public QWidget
 {
     Q_OBJECT
 public:
+    /**
+     * @brief Constructs the face database UI and binds refresh controls.
+     * @param sync Server sync manager providing person data.
+     * @param parent Optional parent widget.
+     */
     explicit FaceDatabasePage(ServerSyncManager* sync, QWidget* parent = nullptr);
+    /**
+     * @brief Updates the gallery with remotely fetched persons.
+     * @param persons List of person records.
+     */
     void setRemotePersons(const QList<PersonRecord>& persons);
 
 signals:
@@ -58,7 +82,6 @@ private:
     PersonRecord personById(const QString& id) const;
     void updateDetailPanel();
     QPixmap buildFacePixmap(const PersonRecord& person, const QSize& size) const;
-    void setStatusMessage(const QString& text, bool isError = false);
 };
 
 #endif // FACEDATABASEPAGE_H

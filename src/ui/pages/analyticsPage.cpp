@@ -1,3 +1,7 @@
+/**
+ * @file analyticsPage.cpp
+ * @brief Implements the analytics dashboard with charts, tables, and insights.
+ */
 #include "analyticsPage.h"
 
 #include <QVBoxLayout>

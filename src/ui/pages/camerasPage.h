@@ -1,6 +1,19 @@
 #ifndef CAMERASPAGE_H
 #define CAMERASPAGE_H
 
+/**
+ * @file camerasPage.h
+ * @brief UI page that manages a paginated grid of live camera tiles.
+ *
+ * Hosts multiple CameraViewWidget instances, wires frame updates from
+ * CameraManager/AIProcessor, and exposes add/remove/toggle controls for streams
+ * and audio.
+ *
+ * @example
+ * auto* page = new CamerasPage(manager, processor, this);
+ * stackedWidget->addWidget(page);
+ */
+
 #include <QWidget>
 #include <QGridLayout>
 #include <QScrollArea>
@@ -16,10 +29,19 @@
 #include "../../core/AIProcessor.h"
 #include "../widgets/cameraViewWidget.h"
 
+/**
+ * @brief Displays camera tiles with controls to add/remove and paginate streams.
+ */
 class CamerasPage : public QWidget
 {
     Q_OBJECT
 public:
+    /**
+     * @brief Constructs the cameras page and binds frame signals.
+     * @param manager Camera manager providing frames and audio control.
+     * @param processor AI processor for annotated frames.
+     * @param parent Optional parent widget.
+     */
     explicit CamerasPage(CameraManager* manager, AIProcessor* processor, QWidget* parent = nullptr);
 
 private slots:
@@ -38,34 +60,24 @@ private:
     struct CameraProcessingState {
         bool pending = false;
         bool hasAnnotated = false;
+        QImage latestRawFrame;
     };
-
+    QHash<int, CameraProcessingState> processingStates;
     QHash<int, CameraViewWidget*> cameraWidgets;
-    QHash<int, CameraProcessingState> cameraStates;
-    QList<int> cameraOrder;
 
-    QWidget* gridContainer;
-    QGridLayout* grid;
-    QPushButton* btnPrev;
-    QPushButton* btnNext;
-    QLineEdit* rtspInput;
-    QPushButton* btnAddRtsp;
-    QSpinBox* indexSpin = nullptr;
-    QPushButton* btnAddIndex = nullptr;
-
+    QGridLayout* gridLayout = nullptr;
+    QScrollArea* scrollArea = nullptr;
+    QPushButton* addLocalButton = nullptr;
+    QPushButton* addRtspButton = nullptr;
+    QLineEdit* rtspUrlEdit = nullptr;
+    QSpinBox* cameraIdSpin = nullptr;
+    QPushButton* prevPageButton = nullptr;
+    QPushButton* nextPageButton = nullptr;
+    QWidget* gridContainer = nullptr;
+    int pageSize = 6;
     int currentPage = 0;
-    int camsPerPage = 6;
-    int nextCameraId = 0;
-    std::atomic_bool aiBusy{ false };
-    mutable QMutex detectionMutex;
-
-signals:
-    void requestProcessFrame(int id, QImage frame);
-
-private:
-    void setupUi();
-    void updateGrid();
-    void addCameraSource(const QString& source, const QString& title);
+    QSet<int> disabledCameras;
+    QMutex mutex;
 };
 
 #endif // CAMERASPAGE_H

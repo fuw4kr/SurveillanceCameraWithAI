@@ -1,3 +1,7 @@
+/**
+ * @file camerasPage.cpp
+ * @brief Implements the camera grid page with add/remove/toggle controls.
+ */
 #include "CamerasPage.h"
 
 #include <QVBoxLayout>

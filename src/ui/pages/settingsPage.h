@@ -1,6 +1,18 @@
 #ifndef SETTINGSPAGE_H
 #define SETTINGSPAGE_H
 
+/**
+ * @file settingsPage.h
+ * @brief UI page for selecting detection and embedding models.
+ *
+ * Provides comboboxes populated from a models directory and emits signals when
+ * the user chooses new models/configs.
+ *
+ * @example
+ * SettingsPage* page = new SettingsPage(modelsDir, this);
+ * connect(page, &SettingsPage::detectionModelSelected, ...);
+ */
+
 #include <QWidget>
 #include <QVector>
 
@@ -12,8 +24,19 @@ class SettingsPage : public QWidget
 {
     Q_OBJECT
 public:
+    /**
+     * @brief Constructs the settings page and loads available model files.
+     * @param modelsDirectory Root directory to scan for models.
+     * @param parent Optional parent widget.
+     */
     explicit SettingsPage(const QString& modelsDirectory, QWidget* parent = nullptr);
 
+    /**
+     * @brief Updates UI to reflect currently loaded models.
+     * @param detectionModel Active detection model path.
+     * @param detectionConfig Associated config path (if any).
+     * @param embeddingModel Active embedding model path.
+     */
     void setCurrentModels(const QString& detectionModel, const QString& detectionConfig, const QString& embeddingModel);
 
 signals:

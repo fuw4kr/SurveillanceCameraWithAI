@@ -1,6 +1,19 @@
 #ifndef ANALYTICSPAGE_H
 #define ANALYTICSPAGE_H
 
+/**
+ * @file analyticsPage.h
+ * @brief UI page that visualizes detection analytics and attendance metrics.
+ *
+ * Presents charts, tables, and rollups for detected faces/objects and aggregates
+ * per-camera statistics over time. Receives processed frames from AIProcessor to
+ * refresh visuals.
+ *
+ * @example
+ * auto* page = new AnalyticsPage(manager, processor, this);
+ * layout->addWidget(page);
+ */
+
 #include <QWidget>
 #include <QComboBox>
 #include <QLabel>
@@ -37,10 +50,27 @@ class AnalyticsPage : public QWidget
 {
     Q_OBJECT
 public:
+    /**
+     * @brief Builds the analytics dashboard and connects to camera/AI sources.
+     * @param manager Camera manager used to register available streams.
+     * @param processor AI processor emitting detections for aggregation.
+     * @param parent Optional parent widget.
+     */
     explicit AnalyticsPage(CameraManager* manager, AIProcessor* processor, QWidget* parent = nullptr);
 
 private slots:
+    /**
+     * @brief Handles camera selection changes to scope statistics.
+     * @param index Selected combo index.
+     */
     void onCameraChanged(int index);
+    /**
+     * @brief Consumes processed frames to update detections and charts.
+     * @param id Camera id.
+     * @param annotated Annotated frame image.
+     * @param detections Detection list.
+     * @param sourceSize Original frame size.
+     */
     void handleProcessedFrame(int id, const QImage& annotated, const QVector<Detection>& detections, const QSize& sourceSize);
 
 private:
