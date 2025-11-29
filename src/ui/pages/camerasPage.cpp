@@ -11,6 +11,8 @@
 #include <QSize>
 #include <QListWidget>
 #include <QAbstractItemView>
+#include <QMenu>
+#include <QCursor>
 
 CamerasPage::CamerasPage(CameraManager* manager, AIProcessor* processor, ServerSyncManager* sync, QWidget* parent)
     : QWidget(parent)
@@ -89,10 +91,13 @@ void CamerasPage::setupUi()
     remoteCameraList->setSelectionMode(QAbstractItemView::NoSelection);
     remoteCameraList->setStyleSheet(QStringLiteral("QListWidget { background:#0d1117; border:1px solid #1f2937; border-radius:8px; } QListWidget::item { color:#e2e8f0; }"));
     remoteCameraList->setMinimumHeight(150);
+    remoteCameraList->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(remoteCameraList, &QListWidget::itemDoubleClicked, this, &CamerasPage::handleRemoteCameraDoubleClick);
+    connect(remoteCameraList, &QListWidget::customContextMenuRequested, this, &CamerasPage::handleRemoteListContextMenu);
     mainLayout->addWidget(remoteCameraList);
 }
 
-void CamerasPage::addCameraSource(const QString& source, const QString& title)
+void CamerasPage::addCameraSource(const QString& source, const QString& title, bool registerOnServer)
 {
     if (source.isEmpty() || !cameraManager)
         return;
@@ -106,6 +111,7 @@ void CamerasPage::addCameraSource(const QString& source, const QString& title)
     auto* view = new CameraViewWidget(id, this);
     const QString label = title.isEmpty() ? tr("Camera %1").arg(id) : title;
     view->setTitle(label);
+    cameraSources.insert(id, source);
     connect(view, &CameraViewWidget::toggleRequested, this, &CamerasPage::onToggleCamera);
     connect(view, &CameraViewWidget::audioToggled, this, [this](int camId, bool enabled) {
         if (!cameraManager)
@@ -128,7 +134,8 @@ void CamerasPage::addCameraSource(const QString& source, const QString& title)
     cameraManager->startCapture(id);
     updateGrid();
 
-    publishCameraToServer(label, source);
+    if (registerOnServer)
+        publishCameraToServer(label, source);
 }
 
 void CamerasPage::onAddLocalCamera()
@@ -226,6 +233,13 @@ void CamerasPage::onToggleCamera(int id, bool enable)
         cameraManager->stopCapture(id);
     if (auto* view = cameraWidgets.value(id, nullptr))
         view->setCameraActive(enable);
+
+    if (serverSync) {
+        const QString source = cameraSources.value(id);
+        const QString cameraId = remoteCameraIdForStream(source);
+        if (!cameraId.isEmpty())
+            serverSync->updateCameraStatus(cameraId, enable ? QStringLiteral("active") : QStringLiteral("offline"));
+    }
 }
 
 void CamerasPage::onRemoveCamera(int id)
@@ -238,6 +252,7 @@ void CamerasPage::onRemoveCamera(int id)
 
     if (auto* view = cameraWidgets.take(id)) {
         cameraOrder.removeAll(id);
+        cameraSources.remove(id);
         QMutexLocker locker(&detectionMutex);
         cameraStates.remove(id);
         view->deleteLater();
@@ -274,15 +289,24 @@ void CamerasPage::updateRemoteListView()
     if (!remoteCameraList)
         return;
     remoteCameraList->clear();
+    QSet<QString> seenStreams;
     for (const auto& camera : knownRemoteCameras) {
-        const QString name = camera.name.isEmpty() ? camera.streamUrl : camera.name;
+        const QString stream = camera.streamUrl.trimmed();
+        const QString normalized = stream.toLower();
+        const QString name = camera.name.isEmpty() ? stream : camera.name;
         const QString status = camera.status.isEmpty() ? tr("Unknown") : camera.status;
-        const QString summary = QStringLiteral("%1 · %2").arg(name, status);
-        QString subtitle = camera.streamUrl;
+        QString summary = QStringLiteral("%1 - %2").arg(name, status);
+        if (!stream.isEmpty() && seenStreams.contains(normalized))
+            summary.append(tr(" (duplicate)"));
+        QString subtitle = stream;
         if (!camera.location.isEmpty())
             subtitle += QStringLiteral(" (%1)").arg(camera.location);
         auto* item = new QListWidgetItem(QStringLiteral("%1\n%2").arg(summary, subtitle), remoteCameraList);
-        item->setToolTip(camera.streamUrl);
+        item->setToolTip(stream.isEmpty() ? camera.id : stream);
+        item->setData(Qt::UserRole, camera.id);
+        item->setData(Qt::UserRole + 1, stream);
+        item->setData(Qt::UserRole + 2, name);
+        seenStreams.insert(normalized);
     }
 }
 
@@ -290,9 +314,87 @@ void CamerasPage::publishCameraToServer(const QString& name, const QString& stre
 {
     if (!serverSync)
         return;
+    if (cameraExistsOnServer(streamUrl)) {
+        qInfo() << "[CamerasPage]" << "Camera already registered remotely, skipping duplicate:" << streamUrl;
+        return;
+    }
     const QString label = name.isEmpty() ? streamUrl : name;
     QString ip;
     if (streamUrl.startsWith(QStringLiteral("local://")) || streamUrl.startsWith(QStringLiteral("local")))
         ip = streamUrl;
     serverSync->submitCameraRecord(label, streamUrl, ip);
+}
+
+void CamerasPage::openRemoteCamera(const CameraRecord& record)
+{
+    if (record.streamUrl.isEmpty())
+        return;
+    const QString label = record.name.isEmpty() ? record.streamUrl : record.name;
+    addCameraSource(record.streamUrl, label, false);
+}
+
+void CamerasPage::handleRemoteCameraDoubleClick(QListWidgetItem* item)
+{
+    if (!item)
+        return;
+    const QString cameraId = item->data(Qt::UserRole).toString();
+    CameraRecord record = remoteCameraById(cameraId);
+    if (record.id.isEmpty()) {
+        record.id = cameraId;
+        record.streamUrl = item->data(Qt::UserRole + 1).toString();
+        record.name = item->data(Qt::UserRole + 2).toString();
+    }
+    openRemoteCamera(record);
+}
+
+void CamerasPage::handleRemoteListContextMenu(const QPoint& pos)
+{
+    if (!remoteCameraList)
+        return;
+    QListWidgetItem* item = remoteCameraList->itemAt(pos);
+    QMenu menu(this);
+    QAction* openAction = menu.addAction(tr("Open locally"));
+    QAction* deleteAction = menu.addAction(tr("Delete from server"));
+    openAction->setEnabled(item != nullptr);
+    deleteAction->setEnabled(item != nullptr && serverSync != nullptr);
+    QAction* chosen = menu.exec(remoteCameraList->viewport()->mapToGlobal(pos));
+    if (!chosen || !item)
+        return;
+    if (chosen == openAction) {
+        handleRemoteCameraDoubleClick(item);
+        return;
+    }
+    if (chosen == deleteAction && serverSync) {
+        const QString cameraId = item->data(Qt::UserRole).toString();
+        if (!cameraId.isEmpty())
+            serverSync->deleteCameraRecord(cameraId);
+    }
+}
+
+bool CamerasPage::cameraExistsOnServer(const QString& streamUrl) const
+{
+    return !remoteCameraIdForStream(streamUrl).isEmpty();
+}
+
+QString CamerasPage::remoteCameraIdForStream(const QString& streamUrl) const
+{
+    const QString normalized = streamUrl.trimmed().toLower();
+    if (normalized.isEmpty())
+        return {};
+    for (const auto& camera : knownRemoteCameras) {
+        if (camera.streamUrl.trimmed().toLower() == normalized)
+            return camera.id;
+    }
+    return {};
+}
+
+CameraRecord CamerasPage::remoteCameraById(const QString& id) const
+{
+    if (id.isEmpty())
+        return {};
+    for (const auto& camera : knownRemoteCameras) {
+        if (camera.id == id)
+            return camera;
+    }
+    return {};
 }

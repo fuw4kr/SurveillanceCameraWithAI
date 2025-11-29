@@ -19,6 +19,7 @@
 
 class ServerSyncManager;
 class QListWidget;
+class QListWidgetItem;
 
 class CamerasPage : public QWidget
 {
@@ -36,6 +37,8 @@ private slots:
     void onNextPage();
     void onPrevPage();
     void handleRemoteCamerasUpdated(const QList<CameraRecord>& cameras);
+    void handleRemoteCameraDoubleClick(QListWidgetItem* item);
+    void handleRemoteListContextMenu(const QPoint& pos);
 
 private:
     CameraManager* cameraManager;
@@ -48,6 +51,7 @@ private:
 
     QHash<int, CameraViewWidget*> cameraWidgets;
     QHash<int, CameraProcessingState> cameraStates;
+    QHash<int, QString> cameraSources;
     QList<int> cameraOrder;
 
     QWidget* gridContainer;
@@ -73,9 +77,13 @@ signals:
 private:
     void setupUi();
     void updateGrid();
-    void addCameraSource(const QString& source, const QString& title);
+    void addCameraSource(const QString& source, const QString& title, bool registerOnServer = true);
     void updateRemoteListView();
     void publishCameraToServer(const QString& name, const QString& streamUrl);
+    void openRemoteCamera(const CameraRecord& record);
+    bool cameraExistsOnServer(const QString& streamUrl) const;
+    QString remoteCameraIdForStream(const QString& streamUrl) const;
+    CameraRecord remoteCameraById(const QString& id) const;
 };
 
 #endif // CAMERASPAGE_H

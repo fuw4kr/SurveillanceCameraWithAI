@@ -490,6 +490,41 @@ void SupabaseClient::createCamera(const QString& name, const QString& streamUrl,
     });
 }
 
+void SupabaseClient::deleteCamera(const QString& cameraId)
+{
+    if (!isAuthenticated()) {
+        emit cameraDeleteFailed(QStringLiteral("Not authenticated"));
+        return;
+    }
+    if (cameraId.isEmpty()) {
+        emit cameraDeleteFailed(QStringLiteral("Missing camera id"));
+        return;
+    }
+    QNetworkRequest req = authorizedRequest(QStringLiteral("/api/cameras/") + cameraId, false);
+    QNetworkReply* reply = network.deleteResource(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, cameraId]() {
+        handleCameraDeleteReply(reply, cameraId);
+    });
+}
+
+void SupabaseClient::updateCamera(const QString& cameraId, const QJsonObject& fields)
+{
+    if (!isAuthenticated()) {
+        emit cameraUpdateFailed(QStringLiteral("Not authenticated"));
+        return;
+    }
+    if (cameraId.isEmpty() || fields.isEmpty()) {
+        emit cameraUpdateFailed(QStringLiteral("Missing camera update payload"));
+        return;
+    }
+    QNetworkRequest req = authorizedRequest(QStringLiteral("/api/cameras/") + cameraId);
+    const QByteArray payload = QJsonDocument(fields).toJson(QJsonDocument::Compact);
+    QNetworkReply* reply = network.sendCustomRequest(req, QByteArrayLiteral("PATCH"), payload);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        handleCameraUpdateReply(reply);
+    });
+}
+
 void SupabaseClient::handlePersonReply(QNetworkReply* reply)
 {
     if (!reply)
@@ -627,6 +662,39 @@ void SupabaseClient::handleCameraCreateReply(QNetworkReply* reply)
         return;
     }
     emit cameraCreateFailed(QStringLiteral("Invalid response"));
+}
+
+void SupabaseClient::handleCameraDeleteReply(QNetworkReply* reply, const QString& cameraId)
+{
+    if (!reply)
+        return;
+    reply->deleteLater();
+    if (reply->error() != QNetworkReply::NoError) {
+        emit cameraDeleteFailed(reply->errorString());
+        return;
+    }
+    emit cameraDeleted(cameraId);
+}
+
+void SupabaseClient::handleCameraUpdateReply(QNetworkReply* reply)
+{
+    if (!reply)
+        return;
+    reply->deleteLater();
+    if (reply->error() != QNetworkReply::NoError) {
+        emit cameraUpdateFailed(reply->errorString());
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (doc.isObject()) {
+        emit cameraUpdated(parseCameraRecord(doc.object()));
+        return;
+    }
+    if (doc.isArray() && !doc.array().isEmpty() && doc.array().first().isObject()) {
+        emit cameraUpdated(parseCameraRecord(doc.array().first().toObject()));
+        return;
+    }
+    emit cameraUpdateFailed(QStringLiteral("Invalid response"));
 }
 
 

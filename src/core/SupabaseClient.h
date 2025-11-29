@@ -56,6 +56,8 @@ public:
     void uploadPersonAvatar(const QString& personId, const QImage& image);
     void fetchCameras();
     void createCamera(const QString& name, const QString& streamUrl, const QString& ipAddress = QString(), const QString& location = QString(), const QString& status = QStringLiteral("active"));
+    void deleteCamera(const QString& cameraId);
+    void updateCamera(const QString& cameraId, const QJsonObject& fields);
 
 signals:
     void loginFinished(const AuthResult& result);
@@ -81,6 +83,10 @@ signals:
     void camerasFetchFailed(const QString& error);
     void cameraCreated(const CameraRecord& camera);
     void cameraCreateFailed(const QString& error);
+    void cameraDeleted(const QString& cameraId);
+    void cameraDeleteFailed(const QString& error);
+    void cameraUpdated(const CameraRecord& camera);
+    void cameraUpdateFailed(const QString& error);
 
 private:
     void handleLoginReply(QNetworkReply* reply);
@@ -94,6 +100,8 @@ private:
     void handleEmbeddingReply(QNetworkReply* reply);
     void handleCamerasReply(QNetworkReply* reply);
     void handleCameraCreateReply(QNetworkReply* reply);
+    void handleCameraDeleteReply(QNetworkReply* reply, const QString& cameraId);
+    void handleCameraUpdateReply(QNetworkReply* reply);
     QNetworkRequest authorizedRequest(const QString& path, bool jsonContent = true) const;
 
     QNetworkAccessManager network;
