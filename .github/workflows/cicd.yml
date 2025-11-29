@@ -115,6 +115,20 @@ jobs:
           Write-Host "  Package artifacts.... $env:PACKAGE_ARTIFACTS"
           Write-Host "  Force release........ $env:FORCE_PUBLISH_RELEASE"
 
+      - name: Configure CMake
+        run: >
+          cmake -B "${{ env.BUILD_DIR }}" -S .
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=${{ env.VCPKG_TARGET_TRIPLET }}
+          -G Ninja
+
+      - name: Build
+        run: cmake --build "${{ env.BUILD_DIR }}" --config "${{ env.BUILD_TYPE }}"
+
+      - name: Run tests
+        if: ${{ env.RUN_TESTS == 'true' }}
+        run: ctest --test-dir "${{ env.BUILD_DIR }}" --output-on-failure --build-config "${{ env.BUILD_TYPE }}"
 
       - name: Package artifact
         if: ${{ env.PACKAGE_ARTIFACTS == 'true' }}

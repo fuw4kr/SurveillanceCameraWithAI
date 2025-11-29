@@ -36,8 +36,11 @@ public:
     void updatePersonRole(const QString& personId, const QString& newRole);
     void deletePerson(const QString& personId);
     void requestEmbeddingsRefresh();
+    void requestCamerasRefresh();
+    void requestImmediateCamerasRefresh();
     void uploadEmbedding(const QString& personId, const QString& modelName, const QVector<float>& vector);
     void uploadPersonAvatar(const QString& personId, const QImage& image);
+    void submitCameraRecord(const QString& name, const QString& streamUrl, const QString& ipAddress = QString(), const QString& location = QString());
     QUrl baseUrl() const { return serverUrl; }
 
 signals:
@@ -52,6 +55,9 @@ signals:
     void embeddingUploadFailed(const QString& error);
     void avatarUploaded();
     void avatarUploadFailed(const QString& error);
+    void camerasUpdated(const QList<CameraRecord>& cameras);
+    void cameraSubmitted(const CameraRecord& camera);
+    void cameraSubmissionFailed(const QString& error);
 
 private slots:
     void handleLoginResult(const AuthResult& result);
@@ -75,6 +81,10 @@ private slots:
     void handleEmbeddingFailed(const QString& error);
     void handleAvatarUploaded();
     void handleAvatarUploadFailed(const QString& error);
+    void handleCamerasFetched(const QList<CameraRecord>& cameras);
+    void handleCamerasFetchFailed(const QString& error);
+    void handleCameraCreated(const CameraRecord& camera);
+    void handleCameraCreateFailed(const QString& error);
 
 private:
     struct QueuedEvent {
@@ -95,6 +105,7 @@ private:
     QQueue<QueuedEvent> eventQueue;
     QList<PersonRecord> personsCache;
     QList<EmbeddingRecord> embeddingsCache;
+    QList<CameraRecord> camerasCache;
     QHash<QString, PersonRecord> personIndex;
     QHash<QString, PersonRecord> personsById;
 
@@ -109,6 +120,7 @@ private:
     bool personsRequestActive = false;
     bool eventRequestActive = false;
     bool embeddingsRequestActive = false;
+    bool camerasRequestActive = false;
     bool manualCredentialsProvided = false;
     const int maxEventQueueSize = 200;
     const int maxEventAttempts = 3;

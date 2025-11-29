@@ -176,8 +176,7 @@ void FaceDatabasePage::rebuildGallery()
         auto* item = new QListWidgetItem;
         item->setData(Qt::UserRole, person.id);
         const QString display = person.name.isEmpty() ? tr("Unnamed") : person.name;
-        const QString text = tr("%1\nID: %2").arg(display, person.id);
-        item->setText(text);
+        item->setText(display);
         item->setToolTip(tr("%1 (%2)").arg(display, person.role.isEmpty() ? tr("No role") : person.role));
         item->setIcon(QIcon(buildFacePixmap(person, kCardIconSize)));
         gallery->addItem(item);

@@ -1,6 +1,8 @@
 #ifndef AIPROCESSOR_H
 #define AIPROCESSOR_H
 
+#include "AIProcessorONNX.h"
+
 #include <QObject>
 #include <QVector>
 #include <QRect>
@@ -21,8 +23,6 @@
 #include <opencv2/core.hpp>
 #include <opencv2/dnn.hpp>
 #include <opencv2/objdetect.hpp>
-
-class AIProcessorONNX;
 
 struct Detection
 {

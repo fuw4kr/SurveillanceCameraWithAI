@@ -1,5 +1,7 @@
 #include "CamerasPage.h"
 
+#include "../../core/ServerSyncManager.h"
+
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScrollArea>
@@ -7,10 +9,13 @@
 #include <QDebug>
 #include <QMutexLocker>
 #include <QSize>
+#include <QListWidget>
+#include <QAbstractItemView>
 
-CamerasPage::CamerasPage(CameraManager* manager, AIProcessor* processor, QWidget* parent)
+CamerasPage::CamerasPage(CameraManager* manager, AIProcessor* processor, ServerSyncManager* sync, QWidget* parent)
     : QWidget(parent)
     , cameraManager(manager)
+    , serverSync(sync)
     , aiProcessor(processor)
 {
     setupUi();
@@ -18,6 +23,11 @@ CamerasPage::CamerasPage(CameraManager* manager, AIProcessor* processor, QWidget
     if (aiProcessor) {
         connect(this, &CamerasPage::requestProcessFrame, aiProcessor, &AIProcessor::processFrameAsync, Qt::QueuedConnection);
         connect(aiProcessor, &AIProcessor::frameProcessed, this, &CamerasPage::onFrameProcessed, Qt::QueuedConnection);
+    }
+    if (serverSync) {
+        connect(serverSync, &ServerSyncManager::camerasUpdated,
+            this, &CamerasPage::handleRemoteCamerasUpdated);
+        serverSync->requestImmediateCamerasRefresh();
     }
 }
 
@@ -69,6 +79,17 @@ void CamerasPage::setupUi()
 
     mainLayout->addLayout(controls);
     mainLayout->addWidget(scroll, 1);
+
+    QLabel* cloudLabel = new QLabel(tr("Cloud cameras"), this);
+    cloudLabel->setStyleSheet(QStringLiteral("font-weight:600; color:#94a3b8;"));
+    mainLayout->addWidget(cloudLabel);
+
+    remoteCameraList = new QListWidget(this);
+    remoteCameraList->setObjectName(QStringLiteral("remoteCameraList"));
+    remoteCameraList->setSelectionMode(QAbstractItemView::NoSelection);
+    remoteCameraList->setStyleSheet(QStringLiteral("QListWidget { background:#0d1117; border:1px solid #1f2937; border-radius:8px; } QListWidget::item { color:#e2e8f0; }"));
+    remoteCameraList->setMinimumHeight(150);
+    mainLayout->addWidget(remoteCameraList);
 }
 
 void CamerasPage::addCameraSource(const QString& source, const QString& title)
@@ -83,7 +104,8 @@ void CamerasPage::addCameraSource(const QString& source, const QString& title)
     }
 
     auto* view = new CameraViewWidget(id, this);
-    view->setTitle(title.isEmpty() ? tr("Camera %1").arg(id) : title);
+    const QString label = title.isEmpty() ? tr("Camera %1").arg(id) : title;
+    view->setTitle(label);
     connect(view, &CameraViewWidget::toggleRequested, this, &CamerasPage::onToggleCamera);
     connect(view, &CameraViewWidget::audioToggled, this, [this](int camId, bool enabled) {
         if (!cameraManager)
@@ -105,6 +127,8 @@ void CamerasPage::addCameraSource(const QString& source, const QString& title)
 
     cameraManager->startCapture(id);
     updateGrid();
+
+    publishCameraToServer(label, source);
 }
 
 void CamerasPage::onAddLocalCamera()
@@ -237,4 +261,38 @@ void CamerasPage::onPrevPage()
         --currentPage;
         updateGrid();
     }
+}
+
+void CamerasPage::handleRemoteCamerasUpdated(const QList<CameraRecord>& cameras)
+{
+    knownRemoteCameras = cameras;
+    updateRemoteListView();
+}
+
+void CamerasPage::updateRemoteListView()
+{
+    if (!remoteCameraList)
+        return;
+    remoteCameraList->clear();
+    for (const auto& camera : knownRemoteCameras) {
+        const QString name = camera.name.isEmpty() ? camera.streamUrl : camera.name;
+        const QString status = camera.status.isEmpty() ? tr("Unknown") : camera.status;
+        const QString summary = QStringLiteral("%1 · %2").arg(name, status);
+        QString subtitle = camera.streamUrl;
+        if (!camera.location.isEmpty())
+            subtitle += QStringLiteral(" (%1)").arg(camera.location);
+        auto* item = new QListWidgetItem(QStringLiteral("%1\n%2").arg(summary, subtitle), remoteCameraList);
+        item->setToolTip(camera.streamUrl);
+    }
+}
+
+void CamerasPage::publishCameraToServer(const QString& name, const QString& streamUrl)
+{
+    if (!serverSync)
+        return;
+    const QString label = name.isEmpty() ? streamUrl : name;
+    QString ip;
+    if (streamUrl.startsWith(QStringLiteral("local://")) || streamUrl.startsWith(QStringLiteral("local")))
+        ip = streamUrl;
+    serverSync->submitCameraRecord(label, streamUrl, ip);
 }
