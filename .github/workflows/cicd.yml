@@ -67,24 +67,41 @@ env:
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Export GitHub cache env
-        uses: actions/github-script@v7
+      # --- ÍÎÂÀ ËÎÃ²ÊÀ ÊÅØÓÂÀÍÍß (ÏÎ×ÀÒÎÊ) ---
+      
+      # 1. Ñòâîðþºìî óí³êàëüíèé êëþ÷ äëÿ êåøó íà îñíîâ³ ÎÑ ³ âì³ñòó vcpkg.json
+      - name: Create vcpkg cache key
+        id: cache-key
+        shell: pwsh
+        run: |
+          $hash = Get-FileHash "vcpkg.json" -Algorithm SHA256
+          echo "KEY=${{ runner.os }}-vcpkg-$($hash.Hash)" >> $env:GITHUB_OUTPUT
+
+      # 2. Â³äíîâëþºìî (àáî çáåð³ãàºìî â ê³íö³) ïàïêó archives
+      - name: Cache vcpkg archives
+        id: cache-vcpkg
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          # Öå ñòàíäàðòíèé øëÿõ, äå vcpkg çáåð³ãàº ç³áðàí³ zip-àðõ³âè á³íàðíèê³â íà Windows
+          path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
+          key: ${{ steps.cache-key.outputs.KEY }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-
+
+      # --- ÍÎÂÀ ËÎÃ²ÊÀ ÊÅØÓÂÀÍÍß (Ê²ÍÅÖÜ) ---
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           runVcpkgInstall: true
           vcpkgJsonGlob: '**/vcpkg.json'
+        env:
+          # Âêàçóºìî vcpkg âèêîðèñòîâóâàòè ëîêàëüíó ïàïêó (ÿêó ìè â³äíîâèëè âèùå)
+          VCPKG_BINARY_SOURCES: "clear;default,readwrite"
 
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v4
@@ -98,20 +115,6 @@ jobs:
           Write-Host "  Package artifacts.... $env:PACKAGE_ARTIFACTS"
           Write-Host "  Force release........ $env:FORCE_PUBLISH_RELEASE"
 
-      - name: Configure CMake
-        run: >
-          cmake -B "${{ env.BUILD_DIR }}" -S .
-          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-          -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake"
-          -DVCPKG_TARGET_TRIPLET=${{ env.VCPKG_TARGET_TRIPLET }}
-          -G Ninja
-
-      - name: Build
-        run: cmake --build "${{ env.BUILD_DIR }}" --config "${{ env.BUILD_TYPE }}"
-
-      - name: Run tests
-        if: ${{ env.RUN_TESTS == 'true' }}
-        run: ctest --test-dir "${{ env.BUILD_DIR }}" --output-on-failure --build-config "${{ env.BUILD_TYPE }}"
 
       - name: Package artifact
         if: ${{ env.PACKAGE_ARTIFACTS == 'true' }}

@@ -1,39 +1,42 @@
 #ifndef FACEDATABASEPAGE_H
 #define FACEDATABASEPAGE_H
 
-#include <QWidget>
-#include <QVector>
-#include <QString>
-#include <QStringList>
 #include <QPixmap>
 #include <QSize>
+#include <QString>
+#include <QStringList>
+#include <QVector>
+#include <QWidget>
 
 class QListWidget;
 class QListWidgetItem;
 class QLineEdit;
 class QPushButton;
 class QLabel;
+class ServerSyncManager;
 
-#include "../../core/AIProcessor.h"
+#include "../../core/ServerTypes.h"
 
 class FaceDatabasePage : public QWidget
 {
     Q_OBJECT
 public:
-    explicit FaceDatabasePage(AIProcessor* processor, QWidget* parent = nullptr);
+    explicit FaceDatabasePage(ServerSyncManager* sync, QWidget* parent = nullptr);
+    void setRemotePersons(const QList<PersonRecord>& persons);
+
+signals:
+    void requestCloudRefresh();
 
 private slots:
-    void refreshProfiles();
     void handleSearchChanged(const QString& text);
     void handleSelectionChanged();
     void handleRename();
     void handleDelete();
-    void handleMerge();
     void handleNameEdited(const QString& text);
-    void handleFaceDatabaseChanged();
+    void handleRefreshClicked();
 
 private:
-    AIProcessor* aiProcessor = nullptr;
+    ServerSyncManager* serverSync = nullptr;
     QLineEdit* searchInput = nullptr;
     QListWidget* gallery = nullptr;
     QLabel* previewLabel = nullptr;
@@ -43,20 +46,18 @@ private:
     QLineEdit* nameEdit = nullptr;
     QPushButton* renameButton = nullptr;
     QPushButton* deleteButton = nullptr;
-    QPushButton* mergeButton = nullptr;
     QPushButton* refreshButton = nullptr;
 
-    QVector<AIProcessor::FaceProfile> cachedProfiles;
+    QList<PersonRecord> remotePersons;
     QString currentFilter;
     bool updatingSelection = false;
 
-    QVector<AIProcessor::FaceProfile> fetchProfiles() const;
     void rebuildGallery();
     QStringList selectedIds() const;
     QString selectedPrimaryId() const;
-    AIProcessor::FaceProfile profileForId(const QString& id) const;
+    PersonRecord personById(const QString& id) const;
     void updateDetailPanel();
-    QPixmap buildFacePixmap(const AIProcessor::FaceProfile& profile, const QSize& size) const;
+    QPixmap buildFacePixmap(const PersonRecord& person, const QSize& size) const;
     void setStatusMessage(const QString& text, bool isError = false);
 };
 

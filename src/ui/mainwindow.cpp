@@ -4,6 +4,9 @@
  */
 
 #include "MainWindow.h"
+#include "../core/ServerSyncManager.h"
+#include "../core/DetectionEventController.h"
+#include "FaceAlertController.h"
 #include <QApplication>
 #include <QDebug>
 #include <QIcon>
@@ -14,11 +17,13 @@
 #include <QSignalBlocker>
 #include <QMetaObject>
 #include <QStringList>
+#include <QMessageBox>
 #include <algorithm>
 
 MainWindow::MainWindow(QWidget* parent)
     : FramelessWindow(parent)
 {
+    qInfo() << "[MainWindow]" << "Constructing UI";
     setupUi();
     setupTitleBar();
     setupSettingsPopup();
@@ -69,6 +74,12 @@ void MainWindow::setupUi()
     IconName = new QLabel("AI");
     IconName->setObjectName("IconName");
     titleLabel = new QLabel("AI Smart Surveillance System");
+    titleLabel->setStyleSheet("font-weight:600; color:#ccc;");
+    modelInfoLabel = new QLabel;
+    modelInfoLabel->setObjectName("modelInfoLabel");
+    modelInfoLabel->setStyleSheet("font-size:11px; color:#94a3b8;");
+    modelInfoLabel->setAlignment(Qt::AlignVCenter);
+    btnSync = new QPushButton(QStringLiteral("⟳"));
     titleLabel->setObjectName("titleLabel");
     btnThemeToggle = new QPushButton(tr("Dark"));
     btnThemeToggle->setObjectName("btnThemeToggle");
@@ -79,10 +90,11 @@ void MainWindow::setupUi()
     btnClose->setObjectName("btnClose");
     btnSettings->setObjectName("btnSettings");
 
-    for (auto* b : { btnSettings, btnMinimize, btnMaximize, btnClose }) {
+    for (auto* b : { btnSync, btnSettings, btnMinimize, btnMaximize, btnClose }) {
         b->setFixedSize(32, 28);
         b->setFlat(true);
     }
+    btnSync->setToolTip(tr("Sync now"));
     btnThemeToggle->setFixedHeight(28);
     btnThemeToggle->setMinimumWidth(72);
     btnThemeToggle->setFlat(true);
@@ -90,7 +102,9 @@ void MainWindow::setupUi()
 
     titleLayout->addWidget(IconName);
     titleLayout->addWidget(titleLabel);
+    titleLayout->addWidget(modelInfoLabel, 0, Qt::AlignLeft);
     titleLayout->addStretch();
+    titleLayout->addWidget(btnSync);
     titleLayout->addWidget(btnThemeToggle);
     titleLayout->addWidget(btnSettings);
     titleLayout->addWidget(btnMinimize);
@@ -120,6 +134,9 @@ void MainWindow::setupUi()
     stackedWidget = new QStackedWidget;
     stackedWidget->setObjectName("stackedWidget");
 
+    modelsDirectory = QCoreApplication::applicationDirPath() + QStringLiteral("/assets/models");
+    modelSettings = ModelSettings::load();
+
     auto dashboard = new DashboardPage;
     cameraManager = new CameraManager(this);
     aiProcessor = new AIProcessor();
@@ -133,50 +150,77 @@ void MainWindow::setupUi()
     };
 
     const QString binDir = QCoreApplication::applicationDirPath();
-    const QString faceModel = pickPath({
-        binDir + "/assets/models/res10_300x300_ssd_iter_140000.caffemodel",
-        binDir + "/../assets/models/res10_300x300_ssd_iter_140000.caffemodel",
-        binDir + "/../../assets/models/res10_300x300_ssd_iter_140000.caffemodel",
-        binDir + "/../../../assets/models/res10_300x300_ssd_iter_140000.caffemodel"
-    });
-    const QString faceConfig = pickPath({
-        binDir + "/assets/models/deploy.prototxt",
-        binDir + "/../assets/models/deploy.prototxt",
-        binDir + "/../../assets/models/deploy.prototxt",
-        binDir + "/../../../assets/models/deploy.prototxt"
-    });
-    if (!faceModel.isEmpty() && !faceConfig.isEmpty()) {
-        qInfo() << "Loading face model from" << faceModel << "and" << faceConfig;
-        aiProcessor->loadFaceModel(faceModel, faceConfig);
-    } else {
-        qWarning() << "Face model files not found; DNN face detection disabled";
-    }
+    const auto expandCandidates = [&](const QString& relative) {
+        QString normalizedRel = relative;
+        if (!normalizedRel.startsWith('/'))
+            normalizedRel.prepend('/');
+        QStringList expanded;
+        const QStringList prefixes { QString(), QStringLiteral("/.."), QStringLiteral("/../.."), QStringLiteral("/../../..") };
+        for (const QString& prefix : prefixes)
+            expanded << binDir + prefix + normalizedRel;
+        return expanded;
+    };
 
-    const QString embedModel = pickPath({
-        binDir + "/assets/models/face_embedding.onnx",
-        binDir + "/assets/models/mobilefacenet.onnx",
-        binDir + "/assets/models/arcface_r100.onnx",
-        binDir + "/assets/models/arcface.onnx",
-        binDir + "/../assets/models/face_embedding.onnx",
-        binDir + "/../assets/models/mobilefacenet.onnx",
-        binDir + "/../assets/models/arcface_r100.onnx",
-        binDir + "/../assets/models/arcface.onnx",
-        binDir + "/../../assets/models/face_embedding.onnx",
-        binDir + "/../../assets/models/mobilefacenet.onnx",
-        binDir + "/../../assets/models/arcface_r100.onnx",
-        binDir + "/../../assets/models/arcface.onnx",
-        binDir + "/../../../assets/models/face_embedding.onnx",
-        binDir + "/../../../assets/models/mobilefacenet.onnx",
-        binDir + "/../../../assets/models/arcface_r100.onnx",
-        binDir + "/../../../assets/models/arcface.onnx"
-    });
-    if (!embedModel.isEmpty()) {
-        qInfo() << "Loading embedding model from" << embedModel;
-        aiProcessor->loadEmbedModel(embedModel);
-        embedModelPath = embedModel;
-    } else {
-        qWarning() << "Embedding model (.onnx) not found in assets/models; face recognition disabled";
+    auto appendCandidates = [&](QStringList& target, const QString& relative) {
+        target << expandCandidates(relative);
+    };
+
+    QStringList detectionCandidates;
+    appendCandidates(detectionCandidates, "/assets/models/scrfd_2.5g_bnkps.onnx");
+    appendCandidates(detectionCandidates, "/assets/models/face_detection_yunet_2023mar.onnx");
+    appendCandidates(detectionCandidates, "/assets/models/buffalo_s/det_500m.onnx");
+    appendCandidates(detectionCandidates, "/assets/models/det_500m.onnx");
+    appendCandidates(detectionCandidates, "/assets/models/res10_300x300_ssd_iter_140000.caffemodel");
+    const QString defaultDetectionModel = pickPath(detectionCandidates);
+    const QString fallbackSsdModel = pickPath(expandCandidates("/assets/models/res10_300x300_ssd_iter_140000.caffemodel"));
+    const QString fallbackSsdConfig = pickPath(expandCandidates("/assets/models/deploy.prototxt"));
+
+    QStringList embeddingCandidates;
+    appendCandidates(embeddingCandidates, "/assets/models/buffalo_s/w600k_mbf.onnx");
+    appendCandidates(embeddingCandidates, "/assets/models/w600k_mbf.onnx");
+    appendCandidates(embeddingCandidates, "/assets/models/arcface_r100.onnx");
+    appendCandidates(embeddingCandidates, "/assets/models/arcface.onnx");
+    appendCandidates(embeddingCandidates, "/assets/models/face_embedding.onnx");
+    appendCandidates(embeddingCandidates, "/assets/models/mobilefacenet.onnx");
+    const QString defaultEmbeddingModel = pickPath(embeddingCandidates);
+
+    QString desiredDetectionModel = ModelSettings::resolvePath(modelSettings.detectionModel);
+    QString desiredDetectionConfig = ModelSettings::resolvePath(modelSettings.detectionConfig);
+    if (desiredDetectionModel.isEmpty())
+        desiredDetectionModel = defaultDetectionModel;
+    if (desiredDetectionConfig.isEmpty() && desiredDetectionModel.endsWith(QStringLiteral(".caffemodel"), Qt::CaseInsensitive))
+        desiredDetectionConfig = fallbackSsdConfig;
+
+    const auto tryDetection = [&](const QString& model, const QString& config) -> bool {
+        if (model.isEmpty())
+            return false;
+        return loadDetectionModel(model, config, false);
+    };
+
+    if (!tryDetection(desiredDetectionModel, desiredDetectionConfig)) {
+        if (defaultDetectionModel != desiredDetectionModel)
+            tryDetection(defaultDetectionModel,
+                defaultDetectionModel.endsWith(QStringLiteral(".caffemodel"), Qt::CaseInsensitive) ? fallbackSsdConfig : QString());
     }
+    if (currentDetectionModel.isEmpty() && !fallbackSsdModel.isEmpty())
+        loadDetectionModel(fallbackSsdModel, fallbackSsdConfig);
+
+    QString desiredEmbeddingModel = ModelSettings::resolvePath(modelSettings.embeddingModel);
+    if (desiredEmbeddingModel.isEmpty())
+        desiredEmbeddingModel = defaultEmbeddingModel;
+
+    const auto tryEmbedding = [&](const QString& model) -> bool {
+        if (model.isEmpty())
+            return false;
+        return loadEmbeddingModel(model, false);
+    };
+
+    if (!tryEmbedding(desiredEmbeddingModel) && defaultEmbeddingModel != desiredEmbeddingModel)
+        tryEmbedding(defaultEmbeddingModel);
+    if (currentEmbeddingModel.isEmpty() && !defaultEmbeddingModel.isEmpty())
+        loadEmbeddingModel(defaultEmbeddingModel);
+
+    updateModelInfoLabel();
     cachedRecognitionInterval = aiProcessor ? aiProcessor->recognitionInterval() : cachedRecognitionInterval;
     cachedGpuPreference = aiProcessor ? aiProcessor->prefersGpuForEmbeddings() : cachedGpuPreference;
 
@@ -185,19 +229,36 @@ void MainWindow::setupUi()
     connect(aiThread, &QThread::finished, aiProcessor, &QObject::deleteLater);
     aiThread->start();
 
+    serverSync = new ServerSyncManager(this);
+    serverSync->setAiProcessor(aiProcessor);
+
     camerasPage = new CamerasPage(cameraManager, aiProcessor, this);
     analyticsPage = new AnalyticsPage(cameraManager, aiProcessor, this);
-    faceDbPage = new FaceDatabasePage(aiProcessor, this);
+    faceDbPage = new FaceDatabasePage(serverSync, this);
+    face3dPage = new Face3DViewerPage(aiProcessor, this);
+
+    settingsPage = new SettingsPage(modelsDirectory, this);
+    connect(serverSync, &ServerSyncManager::personsUpdated, faceDbPage, &FaceDatabasePage::setRemotePersons);
+    connect(serverSync, &ServerSyncManager::statusMessage, this, &MainWindow::handleServerStatus);
+    connect(serverSync, &ServerSyncManager::errorMessage, this, &MainWindow::handleServerError);
+    if (faceDbPage) {
+        connect(faceDbPage, &FaceDatabasePage::requestCloudRefresh, this, [this]() {
+            if (serverSync)
+                serverSync->requestImmediatePersonsRefresh();
+        });
+    }
+    faceAlertController = new FaceAlertController(aiProcessor, serverSync, this, this);
+    detectionEventController = new DetectionEventController(aiProcessor, serverSync, this);
 
     stackedWidget->addWidget(dashboard);
     stackedWidget->addWidget(camerasPage);
     stackedWidget->addWidget(faceDbPage);
-    stackedWidget->addWidget(new QWidget);
-    stackedWidget->addWidget(new QWidget);
-    stackedWidget->addWidget(new QWidget);
+    stackedWidget->addWidget(new QWidget); // Heatmap placeholder
+    stackedWidget->addWidget(new QWidget); // Events placeholder
+    stackedWidget->addWidget(face3dPage);
     stackedWidget->addWidget(analyticsPage);
     stackedWidget->addWidget(new QWidget);
-    stackedWidget->addWidget(new QWidget);
+    stackedWidget->addWidget(settingsPage);
 
     centerLayout->addWidget(listModes);
     centerLayout->addWidget(stackedWidget, 1);
@@ -208,13 +269,15 @@ void MainWindow::setupUi()
 
     mainLayout->addWidget(titleBar);
     mainLayout->addLayout(centerLayout, 1);
-    mainLayout->addWidget(consoleView);
 
     setCentralWidget(central);
 
     connect(listModes, &QListWidget::currentRowChanged, this, [=](int index) {
         stackedWidget->setCurrentIndex(index);
     });
+
+    if (settingsPage)
+        settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel);
 
     listModes->setCurrentRow(0);
 }
@@ -280,6 +343,8 @@ void MainWindow::setupConnections()
     connect(listModes, &QListWidget::currentRowChanged,
         this, &MainWindow::onModeChanged);
     connect(btnSettings, &QPushButton::clicked, this, &MainWindow::toggleSettingsPopup);
+    if (btnSync)
+        connect(btnSync, &QPushButton::clicked, this, &MainWindow::handleManualSync);
     connect(btnThemeToggle, &QPushButton::clicked, this, &MainWindow::toggleTheme);
     if (recognitionSlider)
         connect(recognitionSlider, &QSlider::valueChanged, this, &MainWindow::handleRecognitionSlider);
@@ -295,6 +360,13 @@ void MainWindow::setupConnections()
             cachedGpuPreference = useGpu;
             refreshSettingsUi();
         }, Qt::QueuedConnection);
+    }
+
+    if (settingsPage) {
+        connect(settingsPage, &SettingsPage::detectionModelSelected,
+            this, &MainWindow::onDetectionModelSelected);
+        connect(settingsPage, &SettingsPage::embeddingModelSelected,
+            this, &MainWindow::onEmbeddingModelSelected);
     }
 }
 
@@ -424,4 +496,124 @@ void MainWindow::refreshSettingsUi()
         const QSignalBlocker blocker(gpuToggle);
         gpuToggle->setChecked(cachedGpuPreference);
     }
+}
+
+void MainWindow::onDetectionModelSelected(const QString& modelPath, const QString& configPath)
+{
+    if (!loadDetectionModel(modelPath, configPath))
+        return;
+    modelSettings.detectionModel = ModelSettings::toRelative(currentDetectionModel);
+    modelSettings.detectionConfig = ModelSettings::toRelative(currentDetectionConfig);
+    modelSettings.save();
+    if (settingsPage)
+        settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel);
+}
+
+void MainWindow::onEmbeddingModelSelected(const QString& modelPath)
+{
+    if (!loadEmbeddingModel(modelPath))
+        return;
+    modelSettings.embeddingModel = ModelSettings::toRelative(currentEmbeddingModel);
+    modelSettings.save();
+    if (settingsPage)
+        settingsPage->setCurrentModels(currentDetectionModel, currentDetectionConfig, currentEmbeddingModel);
+}
+
+bool MainWindow::loadDetectionModel(const QString& modelPath, const QString& configPath, bool warnOnFailure)
+{
+    if (!aiProcessor || modelPath.isEmpty()) {
+        if (warnOnFailure)
+            QMessageBox::warning(this, tr("Face Detection"), tr("Please select a valid face detector model."));
+        return false;
+    }
+
+    const QString resolvedModel = ModelSettings::resolvePath(modelPath);
+    const QString resolvedConfig = ModelSettings::resolvePath(configPath);
+    if (!aiProcessor->loadFaceModel(resolvedModel, resolvedConfig)) {
+        if (warnOnFailure) {
+            QMessageBox::warning(this, tr("Face Detection"),
+                tr("Failed to load face detector:\n%1").arg(resolvedModel));
+        }
+        return false;
+    }
+
+    currentDetectionModel = resolvedModel;
+    currentDetectionConfig = resolvedConfig;
+    qInfo() << "Face detector loaded:" << resolvedModel;
+    updateModelInfoLabel();
+    return true;
+}
+
+bool MainWindow::loadEmbeddingModel(const QString& modelPath, bool warnOnFailure)
+{
+    if (!aiProcessor || modelPath.isEmpty()) {
+        if (warnOnFailure)
+            QMessageBox::warning(this, tr("Face Recognition"), tr("Please select a valid embedding model."));
+        return false;
+    }
+
+    const QString resolvedModel = ModelSettings::resolvePath(modelPath);
+    if (!aiProcessor->loadEmbedModel(resolvedModel)) {
+        if (warnOnFailure) {
+            QMessageBox::warning(this, tr("Face Recognition"),
+                tr("Failed to load embedding model:\n%1").arg(resolvedModel));
+        }
+        return false;
+    }
+
+    embedModelPath = resolvedModel;
+    currentEmbeddingModel = resolvedModel;
+    cachedRecognitionInterval = aiProcessor->recognitionInterval();
+    cachedGpuPreference = aiProcessor->prefersGpuForEmbeddings();
+    refreshSettingsUi();
+    qInfo() << "Embedding model loaded:" << resolvedModel;
+    updateModelInfoLabel();
+    return true;
+}
+
+void MainWindow::updateModelInfoLabel()
+{
+    if (!modelInfoLabel)
+        return;
+
+    auto toLabel = [](const QString& path) -> QString {
+        if (path.isEmpty())
+            return QStringLiteral("-");
+        return QFileInfo(path).fileName();
+    };
+
+    modelInfoLabel->setText(
+        tr("Det: %1 | Emb: %2")
+            .arg(toLabel(currentDetectionModel),
+                toLabel(currentEmbeddingModel)));
+}
+
+void MainWindow::handleServerStatus(const QString& status)
+{
+    qInfo() << "[Server]" << status;
+}
+
+void MainWindow::handleServerError(const QString& error)
+{
+    qWarning() << "[Server]" << error;
+}
+
+void MainWindow::initializeServerSync(const LoginSession& session)
+{
+    if (!serverSync)
+        return;
+    if (!session.email.isEmpty() || !session.password.isEmpty())
+        serverSync->setCredentials(session.email, session.password);
+    if (session.auth.success && !session.auth.token.isEmpty())
+        serverSync->applySessionToken(session.auth.token, session.auth.expiresAt);
+    serverSync->start();
+    qInfo() << "[MainWindow]" << "Server synchronization initialized";
+}
+
+void MainWindow::handleManualSync()
+{
+    if (!serverSync)
+        return;
+    qInfo() << "[MainWindow]" << "Manual sync requested by user";
+    serverSync->requestImmediatePersonsRefresh();
 }

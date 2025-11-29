@@ -197,7 +197,7 @@ void CameraViewWidget::updatePreviewPixmap()
 
     const QImage scaled = lastFrame.scaled(
         previewLabel->size(),
-        Qt::KeepAspectRatioByExpanding,
+        Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
     previewLabel->setPixmap(QPixmap::fromImage(scaled));
 }
