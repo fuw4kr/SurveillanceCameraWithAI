@@ -40,14 +40,21 @@ private slots:
     void onModeChanged(int index);
     void updateMaximizeIcon(bool maxed);
     void toggleSettingsPopup();
+    void toggleTheme();
     void handleRecognitionSlider(int value);
     void handleGpuToggle(bool checked);
 
 private:
+    enum class Theme {
+        Light,
+        Dark
+    };
+
     // === UI elements ===
     QWidget* titleBar;
     QLabel* IconName;
     QLabel* titleLabel;
+    QPushButton* btnThemeToggle;
     QPushButton* btnMinimize;
     QPushButton* btnMaximize;
     QPushButton* btnClose;
@@ -73,6 +80,9 @@ private:
     QThread* aiThread = nullptr;
     int cachedRecognitionInterval = 500;
     bool cachedGpuPreference = true;
+    Theme currentTheme = Theme::Dark;
+    QString darkStylesheet;
+    QString lightStylesheet;
 
     // === Setup ===
     void setupUi();
@@ -82,6 +92,9 @@ private:
     void setupSidebar();
     void setupConsole();
     void setupConnections();
+    void applyTheme(Theme theme);
+    void loadThemeStyles();
+    QString loadStylesheet(const QString& path) const;
 };
 
 #endif // MAINWINDOW_H

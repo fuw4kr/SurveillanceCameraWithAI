@@ -9,6 +9,7 @@
 #include <QIcon>
 #include <QStyle>
 #include <QCoreApplication>
+#include <QFile>
 #include <QFileInfo>
 #include <QSignalBlocker>
 #include <QMetaObject>
@@ -23,6 +24,8 @@ MainWindow::MainWindow(QWidget* parent)
     setupSettingsPopup();
     setupSidebar();
     setupConsole();
+    loadThemeStyles();
+    applyTheme(currentTheme);
     setupConnections();
 
     setWindowTitle("AI Smart Surveillance System");
@@ -63,9 +66,12 @@ void MainWindow::setupUi()
     titleLayout->setContentsMargins(8, 0, 8, 0);
     titleLayout->setSpacing(6);
 
-    IconName = new QLabel("??");
+    IconName = new QLabel("AI");
+    IconName->setObjectName("IconName");
     titleLabel = new QLabel("AI Smart Surveillance System");
-    titleLabel->setStyleSheet("font-weight:600; color:#ccc;");
+    titleLabel->setObjectName("titleLabel");
+    btnThemeToggle = new QPushButton(tr("Dark"));
+    btnThemeToggle->setObjectName("btnThemeToggle");
     btnSettings = new QPushButton(QStringLiteral("\u2699"));
     btnMinimize = new QPushButton("-");
     btnMaximize = new QPushButton("?");
@@ -77,11 +83,15 @@ void MainWindow::setupUi()
         b->setFixedSize(32, 28);
         b->setFlat(true);
     }
+    btnThemeToggle->setFixedHeight(28);
+    btnThemeToggle->setMinimumWidth(72);
+    btnThemeToggle->setFlat(true);
     btnSettings->setToolTip(tr("Settings"));
 
     titleLayout->addWidget(IconName);
     titleLayout->addWidget(titleLabel);
     titleLayout->addStretch();
+    titleLayout->addWidget(btnThemeToggle);
     titleLayout->addWidget(btnSettings);
     titleLayout->addWidget(btnMinimize);
     titleLayout->addWidget(btnMaximize);
@@ -93,6 +103,7 @@ void MainWindow::setupUi()
     centerLayout->setSpacing(4);
 
     listModes = new QListWidget;
+    listModes->setObjectName("listModes");
     listModes->addItems({
         "?? Dashboard",
         "?? Live Cameras",
@@ -192,6 +203,7 @@ void MainWindow::setupUi()
     centerLayout->addWidget(stackedWidget, 1);
 
     consoleView = new QListView;
+    consoleView->setObjectName("consoleView");
     consoleView->setFixedHeight(180);
 
     mainLayout->addWidget(titleBar);
@@ -212,24 +224,6 @@ void MainWindow::setupTitleBar()
 {
     titleBar->setMinimumHeight(36);
     titleBar->setMaximumHeight(36);
-    titleBar->setStyleSheet(R"(
-        QWidget#titleBar {
-            background:#1E1E1E;
-            border-bottom:1px solid #333;
-        }
-        QPushButton {
-            color:#ccc;
-            border:none;
-            font-size:14px;
-        }
-        QPushButton:hover {
-            background:#333;
-        }
-        QPushButton#btnClose:hover {
-            background:#500;
-            color:#ff5555;
-        }
-    )");
 
     connect(btnClose, &QPushButton::clicked, this, &QWidget::close);
     connect(btnMinimize, &QPushButton::clicked, this, &QWidget::showMinimized);
@@ -240,28 +234,19 @@ void MainWindow::setupSettingsPopup()
 {
     settingsPopup = new QWidget(this, Qt::Popup);
     settingsPopup->setObjectName("settingsPopup");
-    settingsPopup->setStyleSheet(R"(
-        QWidget#settingsPopup {
-            background:#1f1f1f;
-            border:1px solid #333;
-            border-radius:6px;
-        }
-        QLabel { color:#ddd; }
-        QCheckBox { color:#ddd; }
-    )");
 
     QVBoxLayout* popupLayout = new QVBoxLayout(settingsPopup);
     popupLayout->setContentsMargins(12, 12, 12, 12);
     popupLayout->setSpacing(8);
 
     QLabel* recognitionLabel = new QLabel(tr("Face recognition interval (ms)"), settingsPopup);
-    recognitionLabel->setStyleSheet("font-weight:600;");
+    recognitionLabel->setObjectName("recognitionLabel");
     recognitionSlider = new QSlider(Qt::Horizontal, settingsPopup);
     recognitionSlider->setRange(100, 3000);
     recognitionSlider->setSingleStep(50);
     recognitionSlider->setPageStep(100);
     recognitionValueLabel = new QLabel(settingsPopup);
-    recognitionValueLabel->setStyleSheet("color:#aaa;");
+    recognitionValueLabel->setObjectName("recognitionValueLabel");
 
     gpuToggle = new QCheckBox(tr("Use GPU acceleration (OpenVINO)"), settingsPopup);
     recognitionSlider->setValue(cachedRecognitionInterval);
@@ -282,30 +267,11 @@ void MainWindow::setupSidebar()
 {
     listModes->setSelectionMode(QAbstractItemView::SingleSelection);
     listModes->setCurrentRow(0);
-    listModes->setStyleSheet(R"(
-        QListWidget {
-            background:#141414; color:#ccc; border:none;
-        }
-        QListWidget::item { padding:8px 12px; }
-        QListWidget::item:selected {
-            background:#2563EB; color:white;
-            border-left:3px solid #3B82F6;
-        }
-    )");
 }
 
 // === Console ===
 void MainWindow::setupConsole()
 {
-    consoleView->setStyleSheet(R"(
-        QListView {
-            background:#0d0d0d;
-            color:#00FF6E;
-            font-family:Consolas;
-            font-size:13px;
-            border-top:1px solid #222;
-        }
-    )");
 }
 
 // === Connections ===
@@ -314,6 +280,7 @@ void MainWindow::setupConnections()
     connect(listModes, &QListWidget::currentRowChanged,
         this, &MainWindow::onModeChanged);
     connect(btnSettings, &QPushButton::clicked, this, &MainWindow::toggleSettingsPopup);
+    connect(btnThemeToggle, &QPushButton::clicked, this, &MainWindow::toggleTheme);
     if (recognitionSlider)
         connect(recognitionSlider, &QSlider::valueChanged, this, &MainWindow::handleRecognitionSlider);
     if (gpuToggle)
@@ -331,6 +298,54 @@ void MainWindow::setupConnections()
     }
 }
 
+void MainWindow::toggleTheme()
+{
+    const Theme nextTheme = (currentTheme == Theme::Light) ? Theme::Dark : Theme::Light;
+    applyTheme(nextTheme);
+}
+
+void MainWindow::applyTheme(Theme theme)
+{
+    currentTheme = theme;
+    const QString stylesheet = (theme == Theme::Light) ? lightStylesheet : darkStylesheet;
+    if (!stylesheet.isEmpty()) {
+        qApp->setStyleSheet(stylesheet);
+    } else {
+        qApp->setStyleSheet(QString());
+    }
+
+    if (btnThemeToggle) {
+        if (theme == Theme::Light) {
+            btnThemeToggle->setText(tr("Light"));
+            btnThemeToggle->setToolTip(tr("Switch to dark theme"));
+        } else {
+            btnThemeToggle->setText(tr("Dark"));
+            btnThemeToggle->setToolTip(tr("Switch to light theme"));
+        }
+    }
+
+    updateMaximizeIcon(isMaximized);
+}
+
+void MainWindow::loadThemeStyles()
+{
+    lightStylesheet = loadStylesheet(":/resources/styles/light.qss");
+    darkStylesheet = loadStylesheet(":/resources/styles/dark.qss");
+    if (lightStylesheet.isEmpty() || darkStylesheet.isEmpty()) {
+        qWarning() << "Theme stylesheets are missing or empty; theme switching may look incorrect.";
+    }
+}
+
+QString MainWindow::loadStylesheet(const QString& path) const
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning() << "Failed to open stylesheet:" << path << "-" << file.errorString();
+        return {};
+    }
+    return QString::fromUtf8(file.readAll());
+}
+
 // === Slots ===
 void MainWindow::onModeChanged(int index)
 {
@@ -341,7 +356,7 @@ void MainWindow::onModeChanged(int index)
 
 void MainWindow::updateMaximizeIcon(bool maxed)
 {
-    bool isLight = true;
+    const bool isLight = (currentTheme == Theme::Light);
     QString path;
     if (maxed)
         path = isLight
