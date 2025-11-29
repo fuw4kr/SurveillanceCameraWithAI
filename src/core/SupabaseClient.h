@@ -11,7 +11,9 @@
  * @example
  * SupabaseClient client;
  * client.login("user@example.com", "secret");
- * connect(&client, &SupabaseClient::loginFinished, [](const AuthResult& r){ /* ... */ });
+ * connect(&client, &SupabaseClient::loginFinished, [](const AuthResult& r){
+ *     qDebug() << r.success;
+ * });
  */
 
 #include "ServerTypes.h"

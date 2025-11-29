@@ -77,25 +77,15 @@ private:
     QHash<int, QString> cameraSources;
     QList<int> cameraOrder;
 
-    QWidget* gridContainer;
-    QGridLayout* grid;
-    QPushButton* btnPrev;
-    QPushButton* btnNext;
-    QLineEdit* rtspInput;
-    QPushButton* btnAddRtsp;
+    QWidget* gridContainer = nullptr;
+    QGridLayout* grid = nullptr;
+    QPushButton* btnPrev = nullptr;
+    QPushButton* btnNext = nullptr;
+    QLineEdit* rtspInput = nullptr;
+    QPushButton* btnAddRtsp = nullptr;
     QSpinBox* indexSpin = nullptr;
     QPushButton* btnAddIndex = nullptr;
     QListWidget* remoteCameraList = nullptr;
-
-    QGridLayout* gridLayout = nullptr;
-    QScrollArea* scrollArea = nullptr;
-    QPushButton* addLocalButton = nullptr;
-    QPushButton* addRtspButton = nullptr;
-    QLineEdit* rtspUrlEdit = nullptr;
-    QSpinBox* cameraIdSpin = nullptr;
-    QPushButton* prevPageButton = nullptr;
-    QPushButton* nextPageButton = nullptr;
-    QWidget* gridContainer = nullptr;
     int pageSize = 6;
     int currentPage = 0;
     int camsPerPage = 6;
