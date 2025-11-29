@@ -5,6 +5,11 @@ on:
       - main
       - feature/docs-ci
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,8 +28,18 @@ jobs:
       - name: Generate documentation
         run: doxygen Doxyfile
 
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: doxygen-html
+          path: out/docs/html
+          if-no-files-found: error
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./out/docs/html
+
+      - name: Output docs URL
+        run: echo "Docs: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
