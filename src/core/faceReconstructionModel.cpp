@@ -138,19 +138,37 @@ QVector<QVector3D> FaceReconstructionModel::parseOutput(const std::vector<float>
     if (vertexCount == 0)
         return points;
 
+    size_t planarCount = 0;
+    if (outputShape.size() >= 3) {
+        const int64_t channels = outputShape[outputShape.size() - 2];
+        const int64_t count = outputShape.back();
+        if (channels == 3 && count > 0)
+            planarCount = static_cast<size_t>(count);
+    }
+    const size_t expectedPoints = planarCount > 0 ? planarCount : static_cast<size_t>(std::min<int64_t>(68, vertexCount));
+
     const bool interleaved = !outputShape.empty()
         && outputShape.back() == 3;
-    points.reserve(static_cast<int>(vertexCount));
+    const size_t stride = std::min({ expectedPoints, vertexCount, output.size() / 3 });
+    points.reserve(static_cast<int>(stride));
 
     if (interleaved) {
-        for (size_t i = 0; i + 2 < output.size(); i += 3)
-            points.append(QVector3D(output[i], output[i + 1], output[i + 2]));
+        for (size_t i = 0; i < stride; ++i) {
+            const size_t base = i * 3;
+            if (base + 2 >= output.size())
+                break;
+            points.append(QVector3D(output[base], output[base + 1], output[base + 2]));
+        }
     } else {
-        const size_t stride = vertexCount;
-        for (size_t i = 0; i < stride && (i + 2 * stride) < output.size(); ++i) {
-            const float x = output[i];
-            const float y = output[i + stride];
-            const float z = output[i + stride * 2];
+        const size_t xOffset = 0;
+        const size_t yOffset = stride;
+        const size_t zOffset = stride * 2;
+        for (size_t i = 0; i < stride; ++i) {
+            if (i + zOffset >= output.size())
+                break;
+            const float x = output[xOffset + i];
+            const float y = output[yOffset + i];
+            const float z = output[zOffset + i];
             points.append(QVector3D(x, y, z));
         }
     }
