@@ -90,7 +90,6 @@ jobs:
 
       # 3. якщо кешу немаЇ - запускаЇмо vcpkg
       - name: Install Dependencies (vcpkg)
-        if: steps.cache.outputs.cache-hit != 'true'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgJsonGlob: '**/vcpkg.json'
