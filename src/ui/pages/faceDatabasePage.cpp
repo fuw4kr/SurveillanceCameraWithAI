@@ -22,6 +22,11 @@
 namespace {
 const QSize kCardIconSize(96, 96);
 const QSize kDetailPreviewSize(240, 240);
+
+bool isUnknownPerson(const PersonRecord& person)
+{
+    return person.name.startsWith(QStringLiteral("UNKNOWN_"), Qt::CaseInsensitive);
+}
 }
 
 FaceDatabasePage::FaceDatabasePage(ServerSyncManager* sync, QWidget* parent)
@@ -179,6 +184,10 @@ void FaceDatabasePage::rebuildGallery()
         item->setText(display);
         item->setToolTip(tr("%1 (%2)").arg(display, person.role.isEmpty() ? tr("No role") : person.role));
         item->setIcon(QIcon(buildFacePixmap(person, kCardIconSize)));
+        if (isUnknownPerson(person)) {
+            item->setBackground(QColor(QStringLiteral("#7f1d1d")));
+            item->setForeground(QColor(QStringLiteral("#fee2e2")));
+        }
         gallery->addItem(item);
         if (previousSelection.contains(person.id))
             item->setSelected(true);
@@ -284,6 +293,7 @@ QPixmap FaceDatabasePage::buildFacePixmap(const PersonRecord& person, const QSiz
     painter.setRenderHint(QPainter::Antialiasing);
 
     QRect rect = pixmap.rect();
+    const bool unknown = isUnknownPerson(person);
     const QString key = resolveImageKey(person.imageUrl);
     if (!key.isEmpty() && avatarCache.contains(key)) {
         QPixmap avatar = avatarCache.value(key);
@@ -297,15 +307,22 @@ QPixmap FaceDatabasePage::buildFacePixmap(const PersonRecord& person, const QSiz
             painter.setClipPath(QPainterPath());
             painter.setPen(QPen(QColor("#0f172a"), 2));
             painter.drawRoundedRect(target, 12, 12);
+            if (unknown) {
+                QPen highlight(QColor(QStringLiteral("#dc2626")));
+                highlight.setWidth(3);
+                painter.setPen(highlight);
+                painter.setBrush(Qt::NoBrush);
+                painter.drawRoundedRect(target.adjusted(1, 1, -1, -1), 12, 12);
+            }
             return pixmap;
         }
     }
 
-    painter.setBrush(QColor("#1f2937"));
+    painter.setBrush(unknown ? QColor(QStringLiteral("#450a0a")) : QColor("#1f2937"));
     painter.setPen(Qt::NoPen);
     painter.drawRoundedRect(rect, 12, 12);
 
-    QPen pen(QColor("#cbd5f5"));
+    QPen pen(unknown ? QColor(QStringLiteral("#fecaca")) : QColor("#cbd5f5"));
     painter.setPen(pen);
     QFont font = painter.font();
     font.setBold(true);
@@ -315,6 +332,13 @@ QPixmap FaceDatabasePage::buildFacePixmap(const PersonRecord& person, const QSiz
         ? QStringLiteral("?")
         : person.name.left(1).toUpper();
     painter.drawText(rect, Qt::AlignCenter, initial);
+    if (unknown) {
+        QPen border(QColor(QStringLiteral("#dc2626")));
+        border.setWidth(3);
+        painter.setPen(border);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(rect.adjusted(4, 4, -4, -4), 12, 12);
+    }
 
     ensureAvatarFetched(person);
     return pixmap;

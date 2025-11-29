@@ -4,7 +4,9 @@
 #include "../core/ServerSyncManager.h"
 #include "dialogs/UnknownFaceDialog.h"
 #include <QMetaObject>
+#include <QRegularExpression>
 #include <QTimer>
+#include <algorithm>
 #include <cmath>
 
 FaceAlertController::FaceAlertController(AIProcessor* processor,
@@ -39,6 +41,8 @@ FaceAlertController::FaceAlertController(AIProcessor* processor,
             this, &FaceAlertController::handleAvatarUploaded);
         connect(serverSync, &ServerSyncManager::avatarUploadFailed,
             this, &FaceAlertController::handleAvatarUploadFailed);
+        connect(serverSync, &ServerSyncManager::personsUpdated,
+            this, &FaceAlertController::handlePersonsDirectoryUpdated);
     }
 }
 
@@ -163,6 +167,32 @@ void FaceAlertController::handleAvatarUploadFailed(const QString& error)
         activeDialog->showError(error);
 }
 
+void FaceAlertController::handlePersonsDirectoryUpdated(const QList<PersonRecord>& persons)
+{
+    QRegularExpression rx(QStringLiteral("^UNKNOWN_(\\d+)$"), QRegularExpression::CaseInsensitiveOption);
+    for (const auto& person : persons) {
+        const auto match = rx.match(person.name);
+        if (!match.hasMatch())
+            continue;
+        bool ok = false;
+        const int value = match.captured(1).toInt(&ok);
+        if (ok)
+            unknownCounter = std::max(unknownCounter, value + 1);
+    }
+}
+
+QString FaceAlertController::nextUnknownLabel()
+{
+    const int maxAttempts = 10000;
+    QString candidate;
+    int attempts = 0;
+    do {
+        candidate = QStringLiteral("UNKNOWN_%1").arg(unknownCounter++);
+        ++attempts;
+    } while (serverSync && !serverSync->personIdForName(candidate).isEmpty() && attempts < maxAttempts);
+    return candidate;
+}
+
 void FaceAlertController::enqueueFace(const PendingFaceAlert& alert)
 {
     pendingQueue.enqueue(alert);
@@ -240,6 +270,20 @@ void FaceAlertController::handleUnknownSelection(const PendingFaceAlert& alert)
                                 .arg(cameraLabel,
                                     alert.detectedAt.toString(Qt::ISODate));
     serverSync->sendUnknownAlert(cameraLabel, message);
+
+    if (alert.embedding.isEmpty()) {
+        qWarning() << "[FaceAlert]" << "Cannot auto-register unknown face without embedding";
+        return;
+    }
+    const QString unknownName = nextUnknownLabel();
+    if (unknownName.isEmpty()) {
+        qWarning() << "[FaceAlert]" << "Failed to allocate UNKNOWN label";
+        return;
+    }
+    qInfo() << "[FaceAlert]" << "Registering unknown person as" << unknownName;
+    if (activeDialog)
+        activeDialog->setBusyState(tr("Registering %1 as unknown...").arg(unknownName));
+    handleKnownSelection(alert, unknownName, QStringLiteral("unknown"), false);
 }
 
 void FaceAlertController::handleKnownSelection(const PendingFaceAlert& alert, const QString& name, const QString& role, bool authorized)

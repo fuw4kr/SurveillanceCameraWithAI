@@ -73,8 +73,10 @@ void UnknownFaceDialog::setupUi(const QImage& snapshot, const QString& cameraLab
     mainLayout->addWidget(statusInfo);
 
     connect(unknownButton, &QPushButton::clicked, this, [this]() {
+        if (busy)
+            return;
         emit markUnknown();
-        close();
+        setBusyState(tr("Registering as unknown..."));
     });
     connect(saveButton, &QPushButton::clicked, this, [this]() {
         if (busy)
