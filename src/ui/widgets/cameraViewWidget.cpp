@@ -1,3 +1,10 @@
+/**
+ * @file cameraViewWidget.cpp
+ * @brief Implements the camera tile preview widget with controls and status updates.
+ *
+ * Handles UI layout, paints scaled previews, tracks heartbeat timing for online/offline
+ * indication, and emits user interaction signals to the host controller.
+ */
 #include "cameraViewWidget.h"
 
 #include <QVBoxLayout>

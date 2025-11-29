@@ -1,3 +1,7 @@
+/**
+ * @file FFVideoDecoder.cpp
+ * @brief FFmpeg video decoding worker emitting QImage frames for cameras.
+ */
 #include "FFVideoDecoder.h"
 
 #include <QThread>

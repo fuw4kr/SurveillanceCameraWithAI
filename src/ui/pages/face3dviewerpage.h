@@ -2,6 +2,18 @@
 #ifndef FACE3DVIEWERPAGE_H
 #define FACE3DVIEWERPAGE_H
 
+/**
+ * @file face3dviewerpage.h
+ * @brief UI page for loading face images and visualizing reconstructed 3D meshes.
+ *
+ * Uses AIProcessor to list enrolled profiles and FaceReconstructionModel to
+ * generate mesh data displayed via FaceMeshView.
+ *
+ * @example
+ * auto* page = new Face3DViewerPage(processor, this);
+ * stackedWidget->addWidget(page);
+ */
+
 #include "../../core/AIProcessor.h"
 #include "../../core/ServerTypes.h"
 #include "../../core/faceReconstructionModel.h"
@@ -30,6 +42,11 @@ class Face3DViewerPage : public QWidget
     Q_OBJECT
 
 public:
+    /**
+     * @brief Constructs the 3D viewer page and primes model loading.
+     * @param processor AI processor used to fetch profiles and embeddings.
+     * @param parent Optional parent widget.
+     */
     explicit Face3DViewerPage(AIProcessor* processor, ServerSyncManager* sync, QWidget* parent = nullptr);
 
 private slots:

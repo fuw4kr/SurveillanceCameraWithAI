@@ -1,3 +1,7 @@
+/**
+ * @file settingsPage.cpp
+ * @brief Implements the model selection page for detection and embeddings.
+ */
 #include "settingsPage.h"
 
 #include <QComboBox>

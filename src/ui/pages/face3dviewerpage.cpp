@@ -1,3 +1,7 @@
+/**
+ * @file face3dviewerpage.cpp
+ * @brief Implements the face 3D viewer page that reconstructs meshes from images.
+ */
 #include "face3dviewerpage.h"
 
 #include "../widgets/faceMeshView.h"

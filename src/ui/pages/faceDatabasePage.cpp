@@ -1,3 +1,7 @@
+/**
+ * @file faceDatabasePage.cpp
+ * @brief Implements the gallery for viewing and managing face records.
+ */
 #include "faceDatabasePage.h"
 
 #include "../../core/ServerSyncManager.h"

@@ -1,4 +1,10 @@
-﻿#include "AudioStreamPlayer.h"
+﻿/**
+ * @file audioStreamPlayer.cpp
+ * @brief FFmpeg-based audio streaming thread implementation.
+ *
+ * Decodes audio from a remote URL, resamples to the system format, and feeds
+ * data into a QAudioSink while running in its own thread.
+ */#include "AudioStreamPlayer.h"
 #include <QDebug>
 #include <QAudioFormat>
 #include <QAudioSink>
@@ -168,3 +174,4 @@ void AudioStreamPlayer::run()
     avcodec_free_context(&codecCtx);
     avformat_close_input(&fmtCtx);
 }
+

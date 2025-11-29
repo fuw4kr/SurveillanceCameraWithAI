@@ -1,3 +1,10 @@
+/**
+ * @file cameraManager.cpp
+ * @brief Implements multi-camera management, decoding, and audio control.
+ *
+ * Wraps FFVideoDecoder and AudioStreamPlayer instances, normalizes sources, and
+ * emits QImage frames for UI and AI consumers.
+ */
 #include "CameraManager.h"
 
 #include <QCameraDevice>

@@ -1,3 +1,14 @@
+/**
+ * @file AppLogger.cpp
+ * @brief Implements application-wide logging initialization and file handling.
+ *
+ * Installs a Qt message handler that writes to a rotating log file and exposes
+ * helper functions for startup configuration.
+ *
+ * @example
+ * AppLogger::initialize();
+ * qInfo() << "Log path:" << AppLogger::logFilePath();
+ */
 #include "AppLogger.h"
 
 #include <QCoreApplication>

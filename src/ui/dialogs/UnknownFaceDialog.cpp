@@ -1,4 +1,10 @@
-#include "UnknownFaceDialog.h"
+﻿/**
+ * @file UnknownFaceDialog.cpp
+ * @brief Implements the modal dialog for unknown face handling and enrollment.
+ *
+ * Presents a snapshot preview, camera metadata, and actions to mark the face as
+ * unknown or save it as a known person with role/authorization.
+ */#include "UnknownFaceDialog.h"
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -84,7 +90,7 @@ void UnknownFaceDialog::setupUi(const QImage& snapshot, const QString& cameraLab
         const QString name = nameEdit->text().trimmed();
         const QString role = roleEdit->text().trimmed();
         if (name.isEmpty() || role.isEmpty()) {
-            QMessageBox::warning(this, tr("Заповніть поля"), tr("Вкажіть ім'я та роль перед збереженням."));
+            QMessageBox::warning(this, tr("Р—Р°РїРѕРІРЅС–С‚СЊ РїРѕР»СЏ"), tr("Р’РєР°Р¶С–С‚СЊ С–Рј'СЏ С‚Р° СЂРѕР»СЊ РїРµСЂРµРґ Р·Р±РµСЂРµР¶РµРЅРЅСЏРј."));
             return;
         }
         emit savePerson(name, role, authorizedCheck->isChecked());
@@ -133,3 +139,4 @@ void UnknownFaceDialog::showSuccess(const QString& text)
         statusInfo->setText(text);
     }
 }
+

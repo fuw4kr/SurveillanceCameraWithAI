@@ -1,6 +1,20 @@
 #ifndef AIPROCESSOR_H
 #define AIPROCESSOR_H
 
+/**
+ * @file AIProcessor.h
+ * @brief Core analytics engine for face/object/person detection and recognition.
+ *
+ * Wraps OpenCV DNN detectors and an ONNX-based embedding engine, exposing both
+ * synchronous and asynchronous processing APIs. Maintains known embeddings,
+ * performs rate-limited recognition, and emits Qt signals for UI consumers.
+ *
+ * @example
+ * AIProcessor ai;
+ * ai.loadFaceModel("assets/models/scrfd.onnx");
+ * ai.loadEmbedModel("assets/models/arcface.onnx");
+ * auto frame = ai.processFrame(mat, 0);
+ */
 #include "AIProcessorONNX.h"
 
 #include <QObject>
@@ -24,6 +38,11 @@
 #include <opencv2/dnn.hpp>
 #include <opencv2/objdetect.hpp>
 
+class AIProcessorONNX;
+
+/**
+ * @brief Detection metadata emitted by AIProcessor.
+ */
 struct Detection
 {
     QRect rect;
@@ -34,6 +53,9 @@ struct Detection
     QString previewPath; // optional path to enrolled face crop
 };
 
+/**
+ * @brief Result bundle containing annotated frame and detections.
+ */
 struct ProcessedFrame
 {
     cv::Mat annotated;
@@ -44,9 +66,10 @@ Q_DECLARE_METATYPE(Detection)
 Q_DECLARE_METATYPE(QVector<Detection>)
 
 /**
- * @brief AIProcessor runs lightweight analytics (face/object/person detection).
- * It is designed as a reusable component that takes cv::Mat frames and annotates them.
- * Detection models (FaceNet / DNN) can be supplied at runtime via loadFaceModel/loadObjectModel.
+ * @brief Runs detection/recognition pipelines and emits results to consumers.
+ *
+ * Supports loading detection/object models, embedding models, and maintaining a
+ * face database for recognition with caching and rate limiting.
  */
 class AIProcessor : public QObject
 {
@@ -62,32 +85,143 @@ public:
         int sampleCount = 1;
     };
 
+    /**
+     * @brief Loads a face detection model (e.g., YuNet or SSD).
+     * @param modelPath Path to the model file.
+     * @param configPath Optional configuration (for Caffe SSD).
+     * @return bool True when loading succeeds.
+     * @throws None
+     * @example loadFaceModel("det.onnx", "deploy.prototxt");
+     */
     bool loadFaceModel(const QString& modelPath, const QString& configPath = QString());
+    /**
+     * @brief Loads an object detection model.
+     * @param modelPath Path to model weights.
+     * @param configPath Optional config file.
+     * @return bool True on success.
+     * @throws None
+     * @example loadObjectModel("yolov3.onnx");
+     */
     bool loadObjectModel(const QString& modelPath, const QString& configPath = QString());
+    /**
+     * @brief Milliseconds between recognition passes (rate limiting).
+     * @return int Interval in ms.
+     * @throws None
+     */
     int recognitionInterval() const { return recognitionIntervalMs; }
+    /**
+     * @brief Clears cached embeddings and resets timers.
+     * @return void
+     * @throws None
+     */
     void resetBackground();
+    /**
+     * @brief Loads known embeddings from a JSON file.
+     * @param jsonPath Path to embeddings file.
+     * @return bool True when loaded successfully.
+     * @throws None
+     * @example loadKnownEmbeddings("config/embeddings.json");
+     */
     bool loadKnownEmbeddings(const QString& jsonPath); // e.g. config/embeddings.json
+    /**
+     * @brief Adds a new labeled embedding and optionally persists it.
+     * @param name Label/name.
+     * @param faceBgr Face image in BGR.
+     * @param savePath Optional path to persist embeddings.
+     * @return bool True on success.
+     * @throws None
+     * @example addKnownEmbedding("Alice", faceMat, "config/embeddings.json");
+     */
     bool addKnownEmbedding(const QString& name, const cv::Mat& faceBgr, const QString& savePath = QString());
 
+    /**
+     * @brief Indicates GPU preference for embeddings.
+     * @return bool True if GPU backend is preferred.
+     * @throws None
+     */
     bool prefersGpuForEmbeddings() const;
+    /**
+     * @brief Loads an embedding model (ArcFace/MobileFaceNet/SFace/FaceNet).
+     * @param modelPath Path to ONNX model.
+     * @return bool True when loaded.
+     * @throws None
+     * @example loadEmbedModel("arcface.onnx");
+     */
     bool loadEmbedModel(const QString& modelPath);
+    /**
+     * @brief Checks whether an embedding model is currently loaded.
+     * @return bool True if embed model available.
+     * @throws None
+     */
     bool hasEmbedModel() const;
+    /**
+     * @brief Computes an embedding vector for a face crop.
+     * @param faceBgr Face crop in BGR.
+     * @return std::vector<float> Embedding vector (empty on failure).
+     * @throws None
+     * @example auto embedding = computeEmbedding(faceMat);
+     */
     std::vector<float> computeEmbedding(const cv::Mat& faceBgr) const;
 
+    /**
+     * @brief Runs detection/recognition synchronously on a frame.
+     * @param frame Input frame (BGR).
+     * @param cameraId Optional camera id for tracking.
+     * @return ProcessedFrame Annotated frame and detections.
+     * @throws None
+     * @example auto pf = processFrame(mat, 0);
+     */
     ProcessedFrame processFrame(const cv::Mat& frame, int cameraId = -1);
+    /**
+     * @brief Lists known face profiles with metadata.
+     * @return QVector<FaceProfile> Current face profiles.
+     * @throws None
+     * @example auto profiles = listFaceProfiles();
+     */
     Q_INVOKABLE QVector<FaceProfile> listFaceProfiles() const;
+    /**
+     * @brief Renames a face profile by id.
+     * @param id Profile id.
+     * @param newName Desired name.
+     * @return bool True if update succeeded.
+     * @throws None
+     * @example renameFaceProfile(profile.id, "New Name");
+     */
     Q_INVOKABLE bool renameFaceProfile(const QString& id, const QString& newName);
+    /**
+     * @brief Deletes a face profile and associated preview.
+     * @param id Profile id.
+     * @return bool True on success.
+     * @throws None
+     * @example deleteFaceProfile(profile.id);
+     */
     Q_INVOKABLE bool deleteFaceProfile(const QString& id);
+    /**
+     * @brief Merges duplicate profiles into a target profile.
+     * @param targetId Destination profile id.
+     * @param duplicateIds IDs to merge.
+     * @return bool True if merge completed.
+     * @throws None
+     * @example mergeFaceProfiles(targetId, {"dup1", "dup2"});
+     */
     Q_INVOKABLE bool mergeFaceProfiles(const QString& targetId, const QStringList& duplicateIds);
 
 public slots:
+    /** @brief Sets detection confidence threshold for faces. */
     void setFaceConfidence(float threshold);
+    /** @brief Sets detection confidence threshold for objects. */
     void setObjectConfidence(float threshold);
+    /** @brief Adjusts recognition rate-limit interval in milliseconds. */
     void setRecognitionIntervalMs(int intervalMs);
+    /** @brief Sets GPU preference for embedding backend. */
     void setPreferGpuForEmbeddings(bool enable);
+    /** @brief Processes a QImage frame asynchronously. */
     void processFrameAsync(int cameraId, const QImage& frame);
+    /** @brief Async convenience to load embed model on worker thread. */
     void loadEmbedModelAsync(const QString& modelPath) { loadEmbedModel(modelPath); }
+    /** @brief Async convenience to load face detector. */
     void loadFaceModelAsync(const QString& modelPath, const QString& configPath = QString()) { loadFaceModel(modelPath, configPath); }
+    /** @brief Async convenience to load object detector. */
     void loadObjectModelAsync(const QString& modelPath, const QString& configPath = QString()) { loadObjectModel(modelPath, configPath); }
 
 signals:

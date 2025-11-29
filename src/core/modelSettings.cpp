@@ -1,3 +1,7 @@
+/**
+ * @file modelSettings.cpp
+ * @brief Persists detection/embedding model configuration to disk.
+ */
 #include "modelSettings.h"
 
 #include <QCoreApplication>

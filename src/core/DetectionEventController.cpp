@@ -1,3 +1,7 @@
+/**
+ * @file DetectionEventController.cpp
+ * @brief Implements debounced detection event tracking and server notifications.
+ */
 #include "DetectionEventController.h"
 
 #include "AIProcessor.h"
