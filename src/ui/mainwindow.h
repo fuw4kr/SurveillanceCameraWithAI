@@ -48,6 +48,7 @@ private slots:
     void onModeChanged(int index);
     void updateMaximizeIcon(bool maxed);
     void toggleSettingsPopup();
+    void toggleTheme();
     void handleRecognitionSlider(int value);
     void handleGpuToggle(bool checked);
     void onDetectionModelSelected(const QString& modelPath, const QString& configPath);
@@ -57,11 +58,17 @@ private slots:
     void handleManualSync();
 
 private:
+    enum class Theme {
+        Light,
+        Dark
+    };
+
     // === UI elements ===
     QWidget* titleBar;
     QLabel* IconName;
     QLabel* titleLabel;
     QLabel* modelInfoLabel = nullptr;
+    QPushButton* btnThemeToggle;
     QPushButton* btnMinimize;
     QPushButton* btnSync;
     QPushButton* btnMaximize;
@@ -96,6 +103,9 @@ private:
     QString currentDetectionConfig;
     QString currentEmbeddingModel;
     QString modelsDirectory;
+    Theme currentTheme = Theme::Dark;
+    QString darkStylesheet;
+    QString lightStylesheet;
 
     // === Setup ===
     void setupUi();
@@ -107,6 +117,9 @@ private:
     bool loadDetectionModel(const QString& modelPath, const QString& configPath, bool warnOnFailure = true);
     bool loadEmbeddingModel(const QString& modelPath, bool warnOnFailure = true);
     void updateModelInfoLabel();
+    void applyTheme(Theme theme);
+    void loadThemeStyles();
+    QString loadStylesheet(const QString& path) const;
 };
 
 #endif // MAINWINDOW_H
