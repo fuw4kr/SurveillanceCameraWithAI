@@ -63,9 +63,11 @@ QList<int> parseHourlyDetections(const QJsonDocument& doc)
 {
     QList<int> result(24, 0);
     QJsonArray arr;
+
     if (doc.isArray()) {
         arr = doc.array();
-    } else {
+    }
+    else {
         const QJsonObject obj = doc.object();
         arr = obj.value(QStringLiteral("detections")).toArray();
         if (arr.isEmpty())
@@ -74,6 +76,33 @@ QList<int> parseHourlyDetections(const QJsonDocument& doc)
             arr = obj.value(QStringLiteral("hours")).toArray();
         if (arr.isEmpty())
             arr = obj.value(QStringLiteral("items")).toArray();
+    }
+
+    if (arr.isEmpty() && doc.isObject()) {
+        const QJsonObject obj = doc.object();
+
+        const auto applyMap = [&](const QJsonObject& map) -> bool {
+            bool any = false;
+            for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+                bool ok = false;
+                int hour = it.key().toInt(&ok);
+                if (!ok || hour < 0 || hour >= result.size())
+                    continue;
+
+                if (it.value().isDouble()) {
+                    result[hour] = it.value().toInt();
+                    any = true;
+                }
+            }
+            return any;
+            };
+
+        if (applyMap(obj))
+            return result;
+
+        const QJsonObject dataObj = obj.value(QStringLiteral("data")).toObject();
+        if (applyMap(dataObj))
+            return result;
     }
 
     if (arr.isEmpty())
@@ -94,47 +123,30 @@ QList<int> parseHourlyDetections(const QJsonDocument& doc)
         }
     }
 
-    const auto applyMap = [&](const QJsonObject& map) -> bool {
-        bool any = false;
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-            bool ok = false;
-            const int hour = it.key().toInt(&ok);
-            if (!ok)
-                continue;
-            if (hour < 0 || hour >= result.size())
-                continue;
-            if (it.value().isDouble()) {
-                result[hour] = it.value().toInt();
-                any = true;
-            }
-        }
-        return any;
-    };
-
-    if (arr.isEmpty() && doc.isObject()) {
-        const QJsonObject obj = doc.object();
-        if (applyMap(obj))
-            return result;
-        const QJsonObject dataObj = obj.value(QStringLiteral("data")).toObject();
-        if (applyMap(dataObj))
-            return result;
-    }
-
     bool anyData = false;
     int idx = 0;
     for (const auto& v : arr) {
+
         if (v.isDouble()) {
             if (idx < result.size())
                 result[idx] = v.toInt();
-            ++idx;
+            idx++;
             anyData = true;
-        } else if (v.isObject()) {
+            continue;
+        }
+
+        if (v.isObject()) {
             const QJsonObject obj = v.toObject();
-            const int hour = obj.value(QStringLiteral("hour")).toInt(
-                obj.value(QStringLiteral("h")).toInt(obj.value(QStringLiteral("id")).toInt(-1)));
-            const int count = obj.value(QStringLiteral("count")).toInt(
-                obj.value(QStringLiteral("detections")).toInt(
-                    obj.value(QStringLiteral("total")).toInt(obj.value(QStringLiteral("value")).toInt(0))));
+
+            int hour = obj.value("hour").toInt(
+                obj.value("h").toInt(
+                    obj.value("id").toInt(-1)));
+
+            int count = obj.value("count").toInt(
+                obj.value("detections").toInt(
+                    obj.value("total").toInt(
+                        obj.value("value").toInt(0))));
+
             if (hour >= 0 && hour < result.size()) {
                 result[hour] = count;
                 anyData = true;
@@ -147,6 +159,7 @@ QList<int> parseHourlyDetections(const QJsonDocument& doc)
 
     return result;
 }
+
 
 QString toTimeString(const QJsonValue& value)
 {
@@ -1172,6 +1185,7 @@ void MainWindow::handleStatsDetections(const QJsonArray& detections)
 
     dashboardState.hourlyDetections = parseHourlyDetections(doc);
     dashboardState.hasHourlyDetections = true;
+    qDebug() << "[RAW DETECTIONS]" << QJsonDocument(detections).toJson();
     if (dashboardState.hourlyDetections.isEmpty())
         qWarning() << "[Dashboard] Hourly detections payload empty";
     finalizeDashboardPiece();

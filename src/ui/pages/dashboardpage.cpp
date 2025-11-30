@@ -235,10 +235,15 @@ void DashboardPage::updateActivityChart(const QList<int>& values)
         maxY = std::max(maxY, values[i]);
     }
 
-    const auto axes = chart->axes(Qt::Vertical);
-    if (!axes.isEmpty()) {
-        if (auto* axisY = qobject_cast<QValueAxis*>(axes.first())) {
-            axisY->setRange(0, std::max(10, maxY + 2));
+    qInfo() << "[Dashboard] Updating chart with" << values.size() << "points. Max Y:" << maxY;
+
+    const auto allAxes = chart->axes();
+    for (auto* axis : allAxes) {
+        if (axis->alignment() == Qt::AlignLeft) {
+            if (auto* axisY = qobject_cast<QValueAxis*>(axis)) {
+                axisY->setRange(0, std::max(10, maxY + 2));
+                break;
+            }
         }
     }
 }
