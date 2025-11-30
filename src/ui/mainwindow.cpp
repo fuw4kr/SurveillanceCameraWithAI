@@ -305,7 +305,7 @@ void MainWindow::setupUi()
     modelInfoLabel->setObjectName("modelInfoLabel");
     modelInfoLabel->setStyleSheet("font-size:11px; color:#94a3b8;");
     modelInfoLabel->setAlignment(Qt::AlignVCenter);
-    btnSync = new QPushButton(QStringLiteral("⟳"));
+    btnSync = new QPushButton;
     titleLabel->setObjectName("titleLabel");
     btnThemeToggle = new QPushButton(tr("Dark"));
     btnThemeToggle->setObjectName("btnThemeToggle");
@@ -320,6 +320,11 @@ void MainWindow::setupUi()
         b->setFixedSize(32, 28);
         b->setFlat(true);
     }
+    btnSync->setText(QString());
+    btnSettings->setText(QString());
+    btnMinimize->setText(QString());
+    btnMaximize->setText(QString());
+    btnClose->setText(QString());
     btnSync->setToolTip(tr("Sync now"));
     btnThemeToggle->setFixedHeight(28);
     btnThemeToggle->setMinimumWidth(72);
@@ -337,6 +342,8 @@ void MainWindow::setupUi()
     titleLayout->addWidget(btnMaximize);
     titleLayout->addWidget(btnClose);
 
+    refreshTitleBarIcons();
+
     // ==== content ====
     QHBoxLayout* centerLayout = new QHBoxLayout;
     centerLayout->setContentsMargins(4, 4, 4, 4);
@@ -344,24 +351,36 @@ void MainWindow::setupUi()
 
     listModes = new QListWidget;
     listModes->setObjectName("listModes");
-    listModes->addItems({
-        "?? Dashboard",
-        "?? Live Cameras",
-        "?? Face Database",
-        "?? 3D Face Viewer",
-        "?? AI Analytics",
-        "?? Settings"
-        });
+    struct ModeDefinition {
+        const char* label;
+        const char* iconName;
+    };
+    const ModeDefinition modeDefinitions[] = {
+        { "Dashboard", "dashboard" },
+        { "Live Cameras", "camera" },
+        { "Face Database", "gallery" },
+        { "3D Face Viewer", "3d" },
+        { "AI Analytics", "ai" },
+        { "Settings", "settings" }
+    };
+    navigationModes.clear();
+    listModes->clear();
+    for (const auto& entry : modeDefinitions) {
+        QListWidgetItem* item = new QListWidgetItem(themedIcon(entry.iconName), tr(entry.label));
+        listModes->addItem(item);
+        navigationModes.append({ item, QString::fromUtf8(entry.iconName) });
+    }
     listModes->setFixedWidth(220);
+    refreshNavigationIcons();
 
     stackedWidget = new QStackedWidget;
     stackedWidget->setObjectName("stackedWidget");
 
     dashboardPage = new DashboardPage;
+    dashboardPage->applyTheme((currentTheme == Theme::Dark) ? DashboardPage::Theme::Dark : DashboardPage::Theme::Light);
     modelsDirectory = QCoreApplication::applicationDirPath() + QStringLiteral("/assets/models");
     modelSettings = ModelSettings::load();
 
-    auto dashboard = new DashboardPage;
     cameraManager = new CameraManager(this);
     aiProcessor = new AIProcessor();
 
@@ -549,15 +568,15 @@ void MainWindow::setupSettingsPopup()
     QLabel* recognitionLabel = new QLabel(tr("Face recognition interval (ms)"), settingsPopup);
     recognitionLabel->setObjectName("recognitionLabel");
     recognitionSlider = new QSlider(Qt::Horizontal, settingsPopup);
-    recognitionSlider->setRange(100, 3000);
-    recognitionSlider->setSingleStep(50);
+    recognitionSlider->setRange(0, 3000);
+    recognitionSlider->setSingleStep(20);
     recognitionSlider->setPageStep(100);
     recognitionValueLabel = new QLabel(settingsPopup);
     recognitionValueLabel->setObjectName("recognitionValueLabel");
 
     gpuToggle = new QCheckBox(tr("Use GPU acceleration (OpenVINO)"), settingsPopup);
     recognitionSlider->setValue(cachedRecognitionInterval);
-    recognitionValueLabel->setText(QStringLiteral("%1 ms").arg(cachedRecognitionInterval));
+    recognitionValueLabel->setText(cachedRecognitionInterval == 0 ? tr("Instant") : tr("%1 ms").arg(cachedRecognitionInterval));
     gpuToggle->setChecked(cachedGpuPreference);
 
     popupLayout->addWidget(recognitionLabel);
@@ -673,6 +692,12 @@ void MainWindow::applyTheme(Theme theme)
         }
     }
 
+    if (dashboardPage)
+        dashboardPage->applyTheme((theme == Theme::Dark) ? DashboardPage::Theme::Dark : DashboardPage::Theme::Light);
+
+    refreshTitleBarIcons();
+    refreshNavigationIcons();
+
     updateMaximizeIcon(isMaximized);
 }
 
@@ -716,6 +741,38 @@ QString MainWindow::loadStylesheet(const QString& path) const
     return QString::fromUtf8(file.readAll());
 }
 
+QString MainWindow::themedIconPath(const QString& base) const
+{
+    const bool useDarkGlyphs = (currentTheme == Theme::Light);
+    const QString suffix = useDarkGlyphs ? QStringLiteral("_dark.png") : QStringLiteral("_light.png");
+    return QStringLiteral(":/resources/icons/") + base + suffix;
+}
+
+QIcon MainWindow::themedIcon(const QString& base) const
+{
+    return QIcon(themedIconPath(base));
+}
+
+void MainWindow::refreshTitleBarIcons()
+{
+    if (btnMinimize)
+        btnMinimize->setIcon(themedIcon(QStringLiteral("minimize")));
+    if (btnSync)
+        btnSync->setIcon(themedIcon(QStringLiteral("refresh")));
+    if (btnClose)
+        btnClose->setIcon(themedIcon(QStringLiteral("close")));
+    if (btnSettings)
+        btnSettings->setIcon(themedIcon(QStringLiteral("settings")));
+}
+
+void MainWindow::refreshNavigationIcons()
+{
+    for (const NavigationMode& entry : navigationModes) {
+        if (entry.item)
+            entry.item->setIcon(themedIcon(entry.iconName));
+    }
+}
+
 // === Slots ===
 void MainWindow::onModeChanged(int index)
 {
@@ -737,17 +794,10 @@ void MainWindow::onModeChanged(int index)
  */
 void MainWindow::updateMaximizeIcon(bool maxed)
 {
-    const bool isLight = (currentTheme == Theme::Light);
-    QString path;
-    if (maxed)
-        path = isLight
-        ? ":/resources/icons/icons-for-window/minimize-black.png"
-        : ":/resources/icons/icons-for-window/minimize-white.png";
-    else
-        path = isLight
-        ? ":/resources/icons/icons-for-window/maximize-black.png"
-        : ":/resources/icons/icons-for-window/maximize-white.png";
-    btnMaximize->setIcon(QIcon(path));
+    if (!btnMaximize)
+        return;
+    const QString iconName = maxed ? QStringLiteral("collapse") : QStringLiteral("expand");
+    btnMaximize->setIcon(themedIcon(iconName));
 }
 
 /**
@@ -786,7 +836,7 @@ void MainWindow::handleRecognitionSlider(int value)
 {
     cachedRecognitionInterval = value;
     if (recognitionValueLabel)
-        recognitionValueLabel->setText(QStringLiteral("%1 ms").arg(value));
+        recognitionValueLabel->setText(value == 0 ? tr("Instant") : tr("%1 ms").arg(value));
     if (aiProcessor)
         QMetaObject::invokeMethod(aiProcessor, "setRecognitionIntervalMs", Qt::QueuedConnection, Q_ARG(int, value));
 }
@@ -831,7 +881,7 @@ void MainWindow::refreshSettingsUi()
         const QSignalBlocker blocker(recognitionSlider);
         recognitionSlider->setValue(interval);
         if (recognitionValueLabel)
-            recognitionValueLabel->setText(QStringLiteral("%1 ms").arg(interval));
+            recognitionValueLabel->setText(interval == 0 ? tr("Instant") : tr("%1 ms").arg(interval));
     }
 
     if (gpuToggle) {
@@ -1430,6 +1480,7 @@ void MainWindow::initializeServerSync(const LoginSession& session)
     if (session.auth.success && !session.auth.token.isEmpty())
         serverSync->applySessionToken(session.auth.token, session.auth.expiresAt);
     serverSync->start();
+    serverSync->requestImmediateEmbeddingsRefresh();
     qInfo() << "[MainWindow]" << "Server synchronization initialized";
 
     // Reuse the same session for dashboard stats polling.
@@ -1460,4 +1511,5 @@ void MainWindow::handleManualSync()
         return;
     qInfo() << "[MainWindow]" << "Manual sync requested by user";
     serverSync->requestImmediatePersonsRefresh();
+    serverSync->requestImmediateEmbeddingsRefresh();
 }

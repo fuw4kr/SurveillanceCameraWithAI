@@ -49,6 +49,7 @@ public:
      * @example ServerSyncManager sync(this);
      */
     explicit ServerSyncManager(QObject* parent = nullptr);
+    ~ServerSyncManager() override;
 
     /**
      * @brief Loads configuration (server URL, sync interval, embeddings path).
@@ -170,6 +171,7 @@ public:
      * @example sync.requestEmbeddingsRefresh();
      */
     void requestEmbeddingsRefresh();
+    void requestImmediateEmbeddingsRefresh();
     /**
      * @brief Uploads an embedding vector for a person.
      * @param personId Person identifier.
@@ -258,6 +260,8 @@ private:
     void requestPersonsRefresh();
     bool ensureAuthenticated();
     bool writeEmbeddingsFile(const QList<EmbeddingRecord>& embeddings, QString* errorOut = nullptr) const;
+    bool mirrorEmbeddingsToRuntime(QString* errorOut = nullptr) const;
+    void removeRuntimeEmbeddings() const;
     PersonRecord personById(const QString& id) const;
     QString cameraSourceForLocal(int cameraId) const;
     QString cameraIdForStream(const QString& streamUrl) const;
@@ -266,7 +270,7 @@ private:
     SupabaseClient* client = nullptr;
     AIProcessor* aiProcessor = nullptr;
     CameraManager* cameraManager = nullptr;
-    QTimer syncTimer;
+    bool detectionSyncPending = false;
     QQueue<QueuedEvent> eventQueue;
     QList<PersonRecord> personsCache;
     QList<EmbeddingRecord> embeddingsCache;
@@ -279,6 +283,7 @@ private:
     QUrl serverUrl{ QStringLiteral("https://myserver-tc2d.onrender.com") };
     QString configPath;
     QString embeddingsPath;
+    QString runtimeEmbeddingsPath;
     int syncIntervalMs = 5000;
     bool configLoaded = false;
     bool loginInProgress = false;

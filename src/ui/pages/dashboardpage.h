@@ -22,12 +22,20 @@
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QValueAxis>
+#include <QtCharts/QAbstractAxis>
 #include <QJsonObject>
+#include <QVector>
+#include <QColor>
 
 class DashboardPage : public QWidget
 {
     Q_OBJECT
 public:
+    enum class Theme {
+        Light,
+        Dark
+    };
+
     /**
      * @brief Constructs the dashboard layout and initializes charts/tables.
      * @param parent Optional parent widget.
@@ -57,19 +65,41 @@ public:
      * @param rows Rows in order: time, label, camera.
      */
     void updateRecentEvents(const QList<QStringList>& rows); // {{"11:25","Unknown face","Cam#2"}, ...}
+    /**
+     * @brief Applies the current application theme so custom colors/icons stay in sync.
+     * @param theme Main window theme selection.
+     */
+    void applyTheme(Theme theme);
 
 private:
+    struct CardWidgets {
+        QFrame* frame = nullptr;
+        QLabel* title = nullptr;
+        QLabel* value = nullptr;
+        QLabel* icon = nullptr;
+        QColor accent;
+        QString iconName;
+    };
+
     QLabel* lblCameras;
     QLabel* lblDetections;
     QLabel* lblAlerts;
     QLabel* lblAIStatus;
     QChartView* chartView;
     QTableWidget* tableEvents;
+    QLabel* headerIcon = nullptr;
+    QLabel* headerLabel = nullptr;
+    QVector<CardWidgets> statCards;
+    Theme currentTheme = Theme::Dark;
 
     void setupUi();
-    QFrame* createCard(const QString& title, QLabel* valueLbl, const QColor& color);
+    CardWidgets createCard(const QString& title, QLabel* valueLbl, const QColor& color, const QString& iconName);
     void setupChart();
     void setupTable();
+    void refreshIcons();
+    void refreshCardStyles();
+    void refreshChartTheme();
+    QString themedIconPath(const QString& base) const;
 };
 
 #endif // DASHBOARDPAGE_H

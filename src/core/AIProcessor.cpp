@@ -161,8 +161,8 @@ AIProcessor::AIProcessor(QObject* parent)
     configureOpenCvThreading();
     embedEngine = std::make_unique<AIProcessorONNX>();
     personHog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());
-    loadKnownEmbeddings(kDefaultEmbeddingsPath);
     autoEnrollTimer.start();
+    loadKnownEmbeddings(kDefaultEmbeddingsPath);
 }
 
 bool AIProcessor::loadFaceModel(const QString& modelPath, const QString& configPath)
@@ -312,9 +312,20 @@ bool AIProcessor::hasEmbedModel() const
 
 bool AIProcessor::loadKnownEmbeddings(const QString& jsonPath)
 {
+    if (jsonPath.isEmpty()) {
+        embeddingsPath.clear();
+        setKnownEmbeddings({});
+        invalidateRecognitionCache();
+        emit faceDatabaseChanged();
+        return false;
+    }
+
     embeddingsPath = resolvePath(jsonPath);
     QFile file(embeddingsPath);
     if (!file.exists()) {
+        setKnownEmbeddings({});
+        invalidateRecognitionCache();
+        emit faceDatabaseChanged();
         return false;
     }
     if (!file.open(QIODevice::ReadOnly)) {
@@ -356,6 +367,7 @@ bool AIProcessor::loadKnownEmbeddings(const QString& jsonPath)
     }
 
     setKnownEmbeddings(items);
+    qInfo() << "[AIProcessor]" << "Loaded" << knownEmbeddings.size() << "known embeddings from" << embeddingsPath;
     invalidateRecognitionCache();
     emit faceDatabaseChanged();
     return !knownEmbeddings.empty();
@@ -412,14 +424,14 @@ QString AIProcessor::generateFaceId()
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
-bool AIProcessor::storeEmbeddingEntry(const QString& name, std::vector<float> embedding, const QString& previewPath, const QString& savePath)
+bool AIProcessor::storeEmbeddingEntry(const QString& name, std::vector<float> embedding, const QString& previewPath, const QString& savePath, const QString& explicitId)
 {
     const QString trimmed = name.trimmed();
     if (trimmed.isEmpty() || embedding.empty())
         return false;
 
     LabeledEmbedding entry;
-    entry.id = generateFaceId();
+    entry.id = explicitId.isEmpty() ? generateFaceId() : explicitId;
     entry.name = trimmed;
     entry.embedding = std::move(embedding);
     entry.previewPath = previewPath;
@@ -437,6 +449,7 @@ bool AIProcessor::storeEmbeddingEntry(const QString& name, std::vector<float> em
     }
     invalidateRecognitionCache();
     emit faceDatabaseChanged();
+    qInfo() << "[AIProcessor]" << "Stored embedding for" << trimmed << "to" << path;
     return true;
 }
 
@@ -488,6 +501,48 @@ bool AIProcessor::addKnownEmbedding(const QString& name, const cv::Mat& faceBgr,
     entry.previewPath = saveFacePreview(entry.name, faceBgr);
     entry.sampleCount = 1;
     return storeEmbeddingEntry(entry.name, std::move(entry.embedding), entry.previewPath, savePath);
+}
+
+bool AIProcessor::storeEmbedding(const QString& personId, const QString& name, const QVector<float>& embedding, const QImage& previewImage)
+{
+    if (embedding.isEmpty()) {
+        qWarning() << "[AIProcessor]" << "storeEmbedding called with empty vector for" << name;
+        return false;
+    }
+    std::vector<float> vector(embedding.begin(), embedding.end());
+    QString previewPath;
+    if (!previewImage.isNull()) {
+        cv::Mat previewMat = imageToMat(previewImage);
+        if (!previewMat.empty())
+            previewPath = saveFacePreview(name.isEmpty() ? personId : name, previewMat);
+    }
+    return storeEmbeddingEntry(name, std::move(vector), previewPath, QString(), personId);
+}
+
+void AIProcessor::updateEmbeddingNames(const QHash<QString, PersonRecord>& personsById)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&knownEmbeddingsMutex);
+        for (auto& entry : knownEmbeddings) {
+            if (entry.id.isEmpty())
+                continue;
+            const PersonRecord person = personsById.value(entry.id);
+            if (person.id.isEmpty())
+                continue;
+            const QString resolvedName = person.name.isEmpty() ? entry.name : person.name;
+            if (!resolvedName.isEmpty() && entry.name != resolvedName) {
+                qInfo() << "[AIProcessor]" << "Renaming embedding" << entry.id << "from" << entry.name << "to" << resolvedName;
+                entry.name = resolvedName;
+                changed = true;
+            }
+        }
+    }
+    if (changed) {
+        persistKnownEmbeddings(embeddingsPath);
+        invalidateRecognitionCache();
+        emit faceDatabaseChanged();
+    }
 }
 
 std::vector<float> AIProcessor::computeEmbedding(const cv::Mat& faceBgr) const
@@ -1147,8 +1202,10 @@ AIProcessor::RecognitionCacheEntry AIProcessor::runRecognitionTask(const cv::Mat
         return entry;
 
     const std::vector<float> probe = computeEmbedding(face);
-    if (probe.empty())
+    if (probe.empty()) {
+        qWarning() << "[AIProcessor]" << "Recognition probe embedding empty; skipping comparison";
         return entry;
+    }
 
     float bestSim = -1.0f;
     QString bestName;
@@ -1170,6 +1227,8 @@ AIProcessor::RecognitionCacheEntry AIProcessor::runRecognitionTask(const cv::Mat
         entry.color = recognizedFaceColor;
         entry.similarity = bestSim;
         entry.previewPath = previewPath;
+    } else {
+        qInfo() << "[AIProcessor]" << "Recognition miss. bestSim=" << bestSim << "threshold=" << recognitionThreshold << "label" << bestName;
     }
     return entry;
 }
@@ -1314,6 +1373,9 @@ QVector<Detection> AIProcessor::stabilizeFaces(const QVector<Detection>& rawDete
     QVector<int> matchedProfiles;
     QVector<float> matchedSimilarities;
     if (!recognitionIndices.isEmpty() && !knownSnapshot.empty()) {
+        if (!knownSnapshot.empty() && recognitionIndices.isEmpty()) {
+            qInfo() << "[AIProcessor]" << "No recognition jobs scheduled; known embeddings:" << knownSnapshot.size();
+        }
         QVector<int> assignment = runAssignment(similarityMatrix);
         matchedProfiles = QVector<int>(recognitionIndices.size(), -1);
         matchedSimilarities = QVector<float>(recognitionIndices.size(), -1.0f);
@@ -1339,6 +1401,7 @@ QVector<Detection> AIProcessor::stabilizeFaces(const QVector<Detection>& rawDete
         const float similarity = (idx < matchedSimilarities.size()) ? matchedSimilarities[idx] : -1.0f;
         if (!knownSnapshot.empty() && profileIndex >= 0) {
             const auto& profile = knownSnapshot[profileIndex];
+            qInfo() << "[AIProcessor]" << "Track" << trackId << "tested against profile" << profile.name << "similarity" << similarity;
             if (similarity >= recognitionThreshold) {
                 applyTrackLabel(track, profile.name, similarity, profile.previewPath);
                 track.needsConfirmation = false;
@@ -1363,6 +1426,8 @@ QVector<Detection> AIProcessor::stabilizeFaces(const QVector<Detection>& rawDete
             const bool trackMature = track.framesSinceConfirm >= trackConfirmationInterval;
             if (suppressAutoEnroll)
                 allowAutoEnroll = false;
+            if (track.awaitingServerRecognition)
+                allowAutoEnroll = false;
             if (allowAutoEnroll && track.stableLabel.isEmpty() && trackMature && detIndex < faceCrops.size()) {
                 std::vector<float> embedding = idx < frameEmbeddings.size() ? frameEmbeddings[idx] : std::vector<float>();
                 if (embedding.empty())
@@ -1371,17 +1436,20 @@ QVector<Detection> AIProcessor::stabilizeFaces(const QVector<Detection>& rawDete
                     const QString autoName = makeAutoLabel();
                     const QString previewPath = saveFacePreview(autoName, faceCrops[detIndex]);
                     QVector<float> qtEmbedding = QVector<float>(embedding.begin(), embedding.end());
-                    if (!previewPath.isEmpty() && storeEmbeddingEntry(autoName, std::move(embedding), previewPath)) {
-                        track.stableLabel = autoName;
-                        track.candidateLabel.clear();
-                        track.candidateCount = 0;
-                        track.needsConfirmation = false;
-                        track.framesSinceConfirm = 0;
-                        track.previewPath = previewPath;
-                        track.lastSimilarity = -1.0f;
+                    const QString resolvedPreview = resolvePath(previewPath);
+                    const QString previewSource = QFileInfo(resolvedPreview).exists() ? resolvedPreview : previewPath;
+                    const QImage previewImage(previewSource);
+                    track.stableLabel = autoName;
+                    track.candidateLabel.clear();
+                    track.candidateCount = 0;
+                    track.needsConfirmation = false;
+                    track.framesSinceConfirm = 0;
+                    track.previewPath = previewPath;
+                    track.lastSimilarity = -1.0f;
+                    recognized = true;
+                    if (!previewImage.isNull()) {
+                        track.awaitingServerRecognition = true;
                         autoEnrollTimer.restart();
-                        recognized = true;
-                        const QImage previewImage(previewPath);
                         emit faceAutoEnrolled(autoName, qtEmbedding, previewImage);
                     }
                 }
@@ -1399,7 +1467,10 @@ QVector<Detection> AIProcessor::stabilizeFaces(const QVector<Detection>& rawDete
             detections[i].color = recognizedFaceColor;
         } else if (!track.candidateLabel.isEmpty()) {
             detections[i].label = track.candidateLabel;
-            detections[i].color = faceColor;
+            if (track.candidateSimilarity >= recognitionThreshold)
+                detections[i].color = recognizedFaceColor;
+            else
+                detections[i].color = faceColor;
         } else {
             detections[i].label = QStringLiteral("Face");
             detections[i].color = faceColor;
@@ -1413,6 +1484,8 @@ void AIProcessor::applyTrackLabel(FaceTrack& track, const QString& newLabel, flo
 {
     if (newLabel.isEmpty())
         return;
+
+    track.awaitingServerRecognition = false;
 
     if (track.stableLabel == newLabel) {
         track.candidateLabel.clear();
@@ -1429,11 +1502,19 @@ void AIProcessor::applyTrackLabel(FaceTrack& track, const QString& newLabel, flo
         track.candidateLabel = newLabel;
         track.candidateCount = 1;
     }
+    track.candidateSimilarity = similarity;
+
+    if (track.candidateLabel == track.stableLabel) {
+        track.candidateLabel.clear();
+        track.candidateCount = 0;
+        track.candidateSimilarity = -1.0f;
+    }
 
     if (track.candidateCount >= hysteresisWindow) {
         track.stableLabel = newLabel;
         track.candidateLabel.clear();
         track.candidateCount = 0;
+        track.candidateSimilarity = -1.0f;
         track.lastSimilarity = similarity;
         if (!previewPath.isEmpty())
             track.previewPath = previewPath;

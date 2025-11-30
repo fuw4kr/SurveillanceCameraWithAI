@@ -93,6 +93,14 @@ void FaceAlertController::handleAutoEnroll(const QString& label, const QVector<f
     alert.personLabel = label;
     alert.cameraLabel = tr("Auto-enroll");
     alert.embedding = embedding;
+    if (autoApproveEnrollments) {
+        const QString autoName = nextUnknownLabel();
+        PendingFaceAlert immediate = alert;
+        immediate.personLabel = autoName;
+        qInfo() << "[FaceAlert]" << "Auto-enrolling face without operator review as" << autoName;
+        handleKnownSelection(immediate, autoName, QStringLiteral("auto"), false);
+        return;
+    }
     enqueueFace(alert);
 }
 
@@ -110,6 +118,17 @@ void FaceAlertController::handlePersonSubmitted(const PersonRecord& person)
 {
     qInfo() << "[FaceAlert]" << "Server added person:" << person.name;
     if (awaitingPersonCreation) {
+        const QString localName = pendingName.isEmpty() ? person.name : pendingName;
+        if (aiProcessor && !pendingKnownAlert.embedding.isEmpty()) {
+            AIProcessor* processor = aiProcessor;
+            const QVector<float> embedding = pendingKnownAlert.embedding;
+            const QImage snapshot = pendingKnownAlert.snapshot;
+            QMetaObject::invokeMethod(processor, [processor, localName, embedding, snapshot, person]() {
+                if (!processor->storeEmbedding(person.id, localName, embedding, snapshot))
+                    qWarning() << "[FaceAlert]" << "Failed to persist local embedding for" << localName;
+            }, Qt::QueuedConnection);
+            pendingKnownAlert.embedding.clear();
+        }
         embeddingPending = !pendingKnownAlert.embedding.isEmpty();
         avatarPending = !pendingKnownAlert.snapshot.isNull();
         if (activeDialog)

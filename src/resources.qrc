@@ -2,5 +2,30 @@
     <qresource prefix="/">
         <file>resources/styles/dark.qss</file>
         <file>resources/styles/light.qss</file>
+        <file>resources/icons/3d_dark.png</file>
+        <file>resources/icons/3d_light.png</file>
+        <file>resources/icons/ai_dark.png</file>
+        <file>resources/icons/ai_light.png</file>
+        <file>resources/icons/camera_dark.png</file>
+        <file>resources/icons/camera_light.png</file>
+        <file>resources/icons/close_dark.png</file>
+        <file>resources/icons/close_light.png</file>
+        <file>resources/icons/collapse_dark.png</file>
+        <file>resources/icons/collapse_light.png</file>
+        <file>resources/icons/dashboard_dark.png</file>
+        <file>resources/icons/dashboard_light.png</file>
+        <file>resources/icons/expand_dark.png</file>
+        <file>resources/icons/expand_light.png</file>
+        <file>resources/icons/gallery_dark.png</file>
+        <file>resources/icons/gallery_light.png</file>
+        <file>resources/icons/minimize_dark.png</file>
+        <file>resources/icons/minimize_light.png</file>
+        <file>resources/icons/appicon.png</file>
+        <file>resources/icons/alert.png</file>
+        <file>resources/icons/detection.png</file>
+        <file>resources/icons/refresh_dark.png</file>
+        <file>resources/icons/refresh_light.png</file>
+        <file>resources/icons/settings_dark.png</file>
+        <file>resources/icons/settings_light.png</file>
     </qresource>
 </RCC>

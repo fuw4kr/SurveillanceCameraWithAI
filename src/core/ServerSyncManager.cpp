@@ -69,12 +69,11 @@ ServerSyncManager::ServerSyncManager(QObject* parent)
     connect(client, &SupabaseClient::cameraUpdated, this, &ServerSyncManager::handleCameraUpdated);
     connect(client, &SupabaseClient::cameraUpdateFailed, this, &ServerSyncManager::handleCameraUpdateFailed);
 
-    syncTimer.setSingleShot(false);
-    syncTimer.setInterval(syncIntervalMs);
-    connect(&syncTimer, &QTimer::timeout, this, &ServerSyncManager::handleSyncTick);
-
     embeddingsPath = QCoreApplication::applicationDirPath() + QStringLiteral("/config/embeddings_remote.json");
+    runtimeEmbeddingsPath = QCoreApplication::applicationDirPath() + QStringLiteral("/config/embeddings.json");
 }
+
+ServerSyncManager::~ServerSyncManager() = default;
 
 void ServerSyncManager::setCredentials(const QString& emailValue, const QString& passwordValue)
 {
@@ -280,7 +279,6 @@ bool ServerSyncManager::loadConfig(const QString& path)
         serverUrl = QUrl(QStringLiteral("https://myserver-tc2d.onrender.com"));
 
     syncIntervalMs = std::clamp(syncIntervalMs, 1000, 60000);
-    syncTimer.setInterval(syncIntervalMs);
     client->setBaseUrl(serverUrl);
     configLoaded = true;
     qInfo() << "[ServerSync]" << "Configuration ready. Base URL:" << serverUrl.toString() << "interval:" << syncIntervalMs << "ms";
@@ -313,6 +311,12 @@ void ServerSyncManager::requestImmediatePersonsRefresh()
 {
     personsRequestActive = false;
     requestPersonsRefresh();
+}
+
+void ServerSyncManager::requestImmediateEmbeddingsRefresh()
+{
+    embeddingsRequestActive = false;
+    requestEmbeddingsRefresh();
 }
 
 void ServerSyncManager::deleteCameraRecord(const QString& cameraId)
@@ -361,6 +365,7 @@ void ServerSyncManager::handleLoginResult(const AuthResult& result)
     qInfo() << "[ServerSync]" << "Authenticated. Token expires at" << result.expiresAt.toString(Qt::ISODate);
     emit statusMessage(tr("Authenticated to %1").arg(serverUrl.host()));
     requestPersonsRefresh();
+    requestEmbeddingsRefresh();
     requestCamerasRefresh();
     flushEventQueue();
 }
@@ -375,6 +380,8 @@ void ServerSyncManager::handlePersonsFetched(const QList<PersonRecord>& persons)
             personIndex.insert(person.name.toLower(), person);
         personsById.insert(person.id, person);
     }
+    if (aiProcessor)
+        aiProcessor->updateEmbeddingNames(personsById);
     personsRequestActive = false;
     emit personsUpdated(persons);
     emit statusMessage(tr("Synced %1 person records").arg(persons.size()));
@@ -419,6 +426,7 @@ void ServerSyncManager::handleSyncTick()
     if (!ensureAuthenticated())
         return;
     requestPersonsRefresh();
+    requestEmbeddingsRefresh();
     requestCamerasRefresh();
     flushEventQueue();
     qInfo() << "[ServerSync]" << "Manual sync executed";
@@ -427,8 +435,16 @@ void ServerSyncManager::handleSyncTick()
 void ServerSyncManager::handleFrameProcessed(int cameraId, const QImage&, const QVector<Detection>& detections, const QSize&)
 {
     enqueueDetections(cameraId, detections);
-    if (!detections.isEmpty())
+    if (!detections.isEmpty()) {
         qInfo() << "[ServerSync]" << "Queued" << detections.size() << "detections from camera" << cameraId;
+        if (!detectionSyncPending) {
+            detectionSyncPending = true;
+            QTimer::singleShot(0, this, [this]() {
+                detectionSyncPending = false;
+                handleSyncTick();
+            });
+        }
+    }
 }
 
 void ServerSyncManager::handleAlertPosted()
@@ -484,11 +500,23 @@ void ServerSyncManager::handlePersonDeleteFailed(const QString& error)
 void ServerSyncManager::handleEmbeddingsFetched(const QList<EmbeddingRecord>& embeddings)
 {
     embeddingsRequestActive = false;
+    if (embeddings.isEmpty()) {
+        qWarning() << "[ServerSync]" << "Server returned zero embeddings; keeping previous local mirror";
+        emit statusMessage(tr("Server returned no embeddings; using cached copy."));
+        return;
+    }
     embeddingsCache = embeddings;
     QString persistError;
     if (writeEmbeddingsFile(embeddings, &persistError)) {
-        if (aiProcessor && !embeddingsPath.isEmpty())
-            aiProcessor->loadKnownEmbeddings(embeddingsPath);
+        QString mirrorError;
+        bool mirrored = mirrorEmbeddingsToRuntime(&mirrorError);
+        if (!mirrorError.isEmpty())
+            qWarning() << "[ServerSync]" << mirrorError;
+        if (aiProcessor) {
+            const QString target = mirrored ? runtimeEmbeddingsPath : embeddingsPath;
+            if (!target.isEmpty())
+                aiProcessor->loadKnownEmbeddings(target);
+        }
         emit statusMessage(tr("Synced %1 embeddings").arg(embeddings.size()));
         qInfo() << "[ServerSync]" << "Embeddings sync completed:" << embeddings.size();
     } else {
@@ -711,15 +739,21 @@ bool ServerSyncManager::writeEmbeddingsFile(const QList<EmbeddingRecord>& embedd
     }
     QJsonArray array;
     for (const auto& record : embeddings) {
-        const PersonRecord person = personsById.value(record.personId);
-        if (person.id.isEmpty() || record.vector.isEmpty())
+        if (record.vector.isEmpty())
             continue;
+        const PersonRecord person = personsById.value(record.personId);
         QJsonObject obj;
-        obj.insert(QStringLiteral("id"), person.id);
-        obj.insert(QStringLiteral("name"), person.name.isEmpty() ? person.id : person.name);
+        const QString id = !person.id.isEmpty() ? person.id : record.personId;
+        obj.insert(QStringLiteral("id"), id);
+        const QString name = !person.name.isEmpty()
+            ? person.name
+            : (record.personId.isEmpty() ? tr("Person") : record.personId);
+        obj.insert(QStringLiteral("name"), name);
         obj.insert(QStringLiteral("samples"), 1);
         if (!person.imageUrl.isEmpty())
             obj.insert(QStringLiteral("image"), person.imageUrl);
+        else if (!record.id.isEmpty())
+            obj.insert(QStringLiteral("image"), record.id);
         QJsonArray vecArray;
         for (float v : record.vector)
             vecArray.append(v);
@@ -748,6 +782,43 @@ bool ServerSyncManager::writeEmbeddingsFile(const QList<EmbeddingRecord>& embedd
         return false;
     }
     return true;
+}
+
+bool ServerSyncManager::mirrorEmbeddingsToRuntime(QString* errorOut) const
+{
+    if (embeddingsPath.isEmpty() || runtimeEmbeddingsPath.isEmpty())
+        return false;
+    QDir runtimeDir(QFileInfo(runtimeEmbeddingsPath).dir());
+    if (!runtimeDir.exists() && !runtimeDir.mkpath(QStringLiteral("."))) {
+        const QString message = tr("Failed to create embeddings directory: %1").arg(runtimeDir.absolutePath());
+        qWarning() << "[ServerSync]" << message;
+        if (errorOut)
+            *errorOut = message;
+        return false;
+    }
+    QFile sourceFile(embeddingsPath);
+    if (!sourceFile.exists() || sourceFile.size() == 0) {
+        const QString message = tr("Embeddings source file %1 is empty; retaining previous cache").arg(embeddingsPath);
+        if (errorOut)
+            *errorOut = message;
+        return false;
+    }
+    QFile::remove(runtimeEmbeddingsPath);
+    if (!QFile::copy(embeddingsPath, runtimeEmbeddingsPath)) {
+        const QString message = tr("Failed to mirror embeddings file to %1").arg(runtimeEmbeddingsPath);
+        qWarning() << "[ServerSync]" << message;
+        if (errorOut)
+            *errorOut = message;
+        return false;
+    }
+    QFile::setPermissions(runtimeEmbeddingsPath, QFile::ReadOwner | QFile::WriteOwner);
+    return true;
+}
+
+void ServerSyncManager::removeRuntimeEmbeddings() const
+{
+    if (!runtimeEmbeddingsPath.isEmpty())
+        QFile::remove(runtimeEmbeddingsPath);
 }
 
 PersonRecord ServerSyncManager::personById(const QString& id) const

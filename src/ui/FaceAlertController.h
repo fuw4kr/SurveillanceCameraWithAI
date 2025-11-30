@@ -197,6 +197,7 @@ private:
     bool embeddingPending = false;
     bool avatarPending = false;
     int unknownCounter = 1;
+    bool autoApproveEnrollments = false;
 };
 
 #endif // FACEALERTCONTROLLER_H

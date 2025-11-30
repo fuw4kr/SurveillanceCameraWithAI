@@ -31,6 +31,7 @@
 #include <QWidget>
 #include <QMainWindow>
 #include <QListWidget>
+#include <QListWidgetItem>
 #include <QListView>
 #include <QStackedWidget>
 #include <QPushButton>
@@ -47,6 +48,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
+#include <QIcon>
 
 class QNetworkAccessManager;
 class QTimer;
@@ -275,7 +277,7 @@ private:
     DetectionEventController* detectionEventController = nullptr;
     QString embedModelPath;
     QThread* aiThread = nullptr;
-    int cachedRecognitionInterval = 500;
+    int cachedRecognitionInterval = 0;
     bool cachedGpuPreference = true;
     ModelSettings modelSettings;
     QString currentDetectionModel;
@@ -297,6 +299,12 @@ private:
     QDateTime lastDashboardFetch;
     LoginSession currentLoginSession;
 
+    struct NavigationMode {
+        QListWidgetItem* item = nullptr;
+        QString iconName;
+    };
+    QList<NavigationMode> navigationModes;
+
     // === Setup ===
     void setupUi();
     void setupTitleBar();
@@ -311,6 +319,10 @@ private:
     void applyTheme(Theme theme);
     void loadThemeStyles();
     QString loadStylesheet(const QString& path) const;
+    QString themedIconPath(const QString& base) const;
+    QIcon themedIcon(const QString& base) const;
+    void refreshNavigationIcons();
+    void refreshTitleBarIcons();
     void setupDashboardPolling();
     void fetchDashboard();
     void refreshAuthToken();
