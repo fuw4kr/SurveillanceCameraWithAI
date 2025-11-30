@@ -54,7 +54,9 @@ EmbeddingRecord parseEmbeddingRecord(const QJsonObject& obj)
     record.personId = obj.value(QStringLiteral("person_id")).toString();
     record.modelName = obj.value(QStringLiteral("model_name")).toString();
     record.createdAt = parseDateTime(obj.value(QStringLiteral("created_at")));
-    const QJsonArray arr = obj.value(QStringLiteral("vector")).toArray();
+    QJsonArray arr = obj.value(QStringLiteral("vector")).toArray();
+    if (arr.isEmpty())
+        arr = obj.value(QStringLiteral("embedding")).toArray();
     for (const auto& v : arr)
         record.vector.append(static_cast<float>(v.toDouble()));
     return record;
