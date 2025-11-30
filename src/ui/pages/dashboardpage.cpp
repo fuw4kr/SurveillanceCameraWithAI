@@ -191,8 +191,12 @@ void DashboardPage::applyDashboardData(const QJsonObject& json)
     const QJsonArray activityArray = json.value("activity").toArray();
     for (const auto& val : activityArray)
         activity.append(val.toInt());
-    if (activity.size() == 24)
-        updateActivityChart(activity);
+
+    if (activity.isEmpty()) {
+        activity = QList<int>(24, 0);
+    }
+
+    updateActivityChart(activity);
 
     QList<QStringList> rows;
     const QJsonArray events = json.value("events").toArray();
@@ -216,10 +220,13 @@ void DashboardPage::updateStats(int cameras, int detections, int alerts, bool ai
 
 void DashboardPage::updateActivityChart(const QList<int>& values)
 {
+    if (!chartView || !chartView->chart()) return;
+
     auto* chart = chartView->chart();
+    if (chart->series().isEmpty()) return;
+
     auto* series = qobject_cast<QLineSeries*>(chart->series().first());
-    if (!series)
-        return;
+    if (!series) return;
 
     series->clear();
     int maxY = 0;
@@ -228,8 +235,12 @@ void DashboardPage::updateActivityChart(const QList<int>& values)
         maxY = std::max(maxY, values[i]);
     }
 
-    if (auto* axisY = qobject_cast<QValueAxis*>(chart->axisY()))
-        axisY->setRange(0, std::max(10, maxY + 5));
+    const auto axes = chart->axes(Qt::Vertical);
+    if (!axes.isEmpty()) {
+        if (auto* axisY = qobject_cast<QValueAxis*>(axes.first())) {
+            axisY->setRange(0, std::max(10, maxY + 2));
+        }
+    }
 }
 
 void DashboardPage::updateRecentEvents(const QList<QStringList>& rows)
