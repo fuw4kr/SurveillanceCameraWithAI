@@ -24,7 +24,8 @@ TEST(CameraViewWidgetTest, UpdateFrameSetsOnlineStatus)
 
     auto* preview = widget.findChild<QLabel*>(QStringLiteral("previewLabel"));
     ASSERT_NE(preview, nullptr);
-    ASSERT_NE(preview->pixmap(), nullptr);
+    const QPixmap pix = preview->pixmap();
+    EXPECT_FALSE(pix.isNull());
 }
 
 TEST(CameraViewWidgetTest, UpdateFrameIgnoredWhenDisabled)
@@ -37,7 +38,8 @@ TEST(CameraViewWidgetTest, UpdateFrameIgnoredWhenDisabled)
 
     auto* preview = widget.findChild<QLabel*>(QStringLiteral("previewLabel"));
     ASSERT_NE(preview, nullptr);
-    EXPECT_TRUE(preview->pixmap().isNull());
+    const QPixmap pix = preview->pixmap();
+    EXPECT_TRUE(pix.isNull());
 }
 
 TEST(CameraViewWidgetTest, SetCameraActiveDisablesPreview)
@@ -74,7 +76,8 @@ TEST(CameraViewWidgetTest, SetOnlineClearsFrameWhenOffline)
     auto* status = widget.findChild<QLabel*>(QStringLiteral("statusLabel"));
     ASSERT_NE(preview, nullptr);
     ASSERT_NE(status, nullptr);
-    EXPECT_TRUE(preview->pixmap().isNull());
+    const QPixmap pix = preview->pixmap();
+    EXPECT_TRUE(pix.isNull());
     EXPECT_EQ(status->text(), QStringLiteral("Offline"));
 }
 

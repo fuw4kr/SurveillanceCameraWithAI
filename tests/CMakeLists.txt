@@ -2,6 +2,7 @@ enable_testing()
 
 find_package(GTest CONFIG REQUIRED)
 include(GoogleTest)
+find_package(OpenCV REQUIRED)
 
 # ============== Core tests ==============
 add_executable(core_tests
