@@ -28,6 +28,7 @@
 #include <QSize>
 #include <QMutex>
 #include <QHash>
+#include <QHash>
 #include <QStringList>
 #include <QSet>
 
@@ -36,6 +37,7 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/dnn.hpp>
+#include "ServerTypes.h"
 #include <opencv2/objdetect.hpp>
 
 class AIProcessorONNX;
@@ -133,6 +135,8 @@ public:
      * @example addKnownEmbedding("Alice", faceMat, "config/embeddings.json");
      */
     bool addKnownEmbedding(const QString& name, const cv::Mat& faceBgr, const QString& savePath = QString());
+    bool storeEmbedding(const QString& personId, const QString& name, const QVector<float>& embedding, const QImage& previewImage);
+    void updateEmbeddingNames(const QHash<QString, PersonRecord>& personsById);
 
     /**
      * @brief Indicates GPU preference for embeddings.
@@ -277,7 +281,7 @@ private:
     QString saveFacePreview(const QString& name, const cv::Mat& faceBgr) const;
     QString resolvePreviewPath(const QString& storedPath) const;
     static QString generateFaceId();
-    bool storeEmbeddingEntry(const QString& name, std::vector<float> embedding, const QString& previewPath, const QString& savePath = QString());
+    bool storeEmbeddingEntry(const QString& name, std::vector<float> embedding, const QString& previewPath, const QString& savePath = QString(), const QString& explicitId = QString());
     QString makeAutoLabel();
     void invalidateRecognitionCache();
     bool removeFacePreviewFile(const QString& storedPath) const;
@@ -323,7 +327,7 @@ private:
     int autoEnrollCooldownMs = 2000;
     QElapsedTimer autoEnrollTimer;
     int autoEnrollCounter = 1;
-    int recognitionIntervalMs = 500;
+    int recognitionIntervalMs = 0;
     mutable QElapsedTimer recognitionTimer;
     int recognitionCacheTtlMs = 500;
     mutable QMutex embeddingMutex;
@@ -342,6 +346,8 @@ private:
         bool needsConfirmation = true;
         QString previewPath;
         float lastSimilarity = -1.0f;
+        float candidateSimilarity = -1.0f;
+        bool awaitingServerRecognition = false;
     };
     QHash<int, QHash<quint64, FaceTrack>> cameraTracks;
     quint64 nextTrackId = 1;

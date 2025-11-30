@@ -16,6 +16,7 @@
 #include "core/AppLogger.h"
 #include <QApplication>
 #include <QDialog>
+#include <QIcon>
 
 /**
  * @brief Launches the application, enforcing authentication before showing the main window.
@@ -38,6 +39,7 @@
  */
 int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
+    a.setWindowIcon(QIcon(QStringLiteral(":/resources/icons/appicon.png")));
     AppLogger::initialize();
 
     LoginWindow login;

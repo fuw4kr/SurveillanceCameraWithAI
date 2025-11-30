@@ -5,9 +5,9 @@
  * @file ServerSyncManager.h
  * @brief Orchestrates synchronization of detections, persons, and embeddings with the backend.
  *
- * Handles authentication, periodic polling, queuing detection events, uploading embeddings
- * and avatars, and broadcasting updates to UI components. Integrates AIProcessor outputs
- * with SupabaseClient REST calls.
+ * Handles authentication, periodic polling, uploading embeddings and avatars, and
+ * broadcasting updates to UI components. Integrates AIProcessor outputs with
+ * SupabaseClient REST calls and streams debounced detection events to the server.
  *
  * @example
  * ServerSyncManager sync;
@@ -22,7 +22,6 @@
 #include <QDateTime>
 #include <QImage>
 #include <QObject>
-#include <QQueue>
 #include <QHash>
 #include <QTimer>
 #include <QSize>
@@ -34,7 +33,7 @@ class CameraManager;
 /**
  * @brief Manages backend communication for detections, alerts, and person records.
  *
- * Queues events to avoid flooding, refreshes person/embedding data, and exposes
+ * Posts detection lifecycle events, refreshes person/embedding data, and exposes
  * signals for UI updates.
  */
 class ServerSyncManager : public QObject
@@ -49,6 +48,7 @@ public:
      * @example ServerSyncManager sync(this);
      */
     explicit ServerSyncManager(QObject* parent = nullptr);
+    ~ServerSyncManager() override;
 
     /**
      * @brief Loads configuration (server URL, sync interval, embeddings path).
@@ -144,7 +144,12 @@ public:
      * @throws None
      * @example sync.sendDetectionStatus(id, 1, true, QDateTime::currentDateTimeUtc());
      */
-    virtual void sendDetectionStatus(const QString& personId, int cameraId, bool active, const QDateTime& timestamp);
+virtual void sendDetectionStatus(const QString& personId,
+        int cameraId,
+        bool active,
+        const QDateTime& timestamp,
+        const QImage& snapshot = QImage(),
+        float confidence = -1.0f);
     /**
      * @brief Renames a person in the backend.
      * @param personId Person identifier.
@@ -170,6 +175,7 @@ public:
      * @example sync.requestEmbeddingsRefresh();
      */
     void requestEmbeddingsRefresh();
+    void requestImmediateEmbeddingsRefresh();
     /**
      * @brief Uploads an embedding vector for a person.
      * @param personId Person identifier.
@@ -223,7 +229,6 @@ private slots:
     void handleEventPosted(const EventPayload& event);
     void handleEventPostFailed(const EventPayload& event, const QString& error);
     void handleSyncTick();
-    void handleFrameProcessed(int cameraId, const QImage& annotated, const QVector<Detection>& detections, const QSize& sourceSize);
     void handleAlertPosted();
     void handleAlertFailed(const QString& error);
     void handlePersonCreated(const PersonRecord& person);
@@ -249,16 +254,11 @@ private slots:
 
 private:
     friend class ServerSyncManagerTestAccessor;
-    struct QueuedEvent {
-        EventPayload payload;
-        int attempts = 0;
-    };
-
-    void enqueueDetections(int cameraId, const QVector<Detection>& detections);
-    void flushEventQueue();
     void requestPersonsRefresh();
     bool ensureAuthenticated();
     bool writeEmbeddingsFile(const QList<EmbeddingRecord>& embeddings, QString* errorOut = nullptr) const;
+    bool mirrorEmbeddingsToRuntime(QString* errorOut = nullptr) const;
+    void removeRuntimeEmbeddings() const;
     PersonRecord personById(const QString& id) const;
     QString cameraSourceForLocal(int cameraId) const;
     QString cameraIdForStream(const QString& streamUrl) const;
@@ -267,8 +267,6 @@ private:
     SupabaseClient* client = nullptr;
     AIProcessor* aiProcessor = nullptr;
     CameraManager* cameraManager = nullptr;
-    QTimer syncTimer;
-    QQueue<QueuedEvent> eventQueue;
     QList<PersonRecord> personsCache;
     QList<EmbeddingRecord> embeddingsCache;
     QList<CameraRecord> camerasCache;
@@ -280,16 +278,14 @@ private:
     QUrl serverUrl{ QStringLiteral("https://myserver-tc2d.onrender.com") };
     QString configPath;
     QString embeddingsPath;
+    QString runtimeEmbeddingsPath;
     int syncIntervalMs = 5000;
     bool configLoaded = false;
     bool loginInProgress = false;
     bool personsRequestActive = false;
-    bool eventRequestActive = false;
     bool embeddingsRequestActive = false;
     bool camerasRequestActive = false;
     bool manualCredentialsProvided = false;
-    const int maxEventQueueSize = 200;
-    const int maxEventAttempts = 3;
 };
 
 #endif // SERVERSYNCMANAGER_H

@@ -39,7 +39,11 @@
 #include <QUrl>
 #include <QMessageBox>
 #include <QDateTime>
+#include <QDate>
+#include <QtGlobal>
 #include <algorithm>
+#include <initializer_list>
+#include <functional>
 
 namespace {
 
@@ -173,61 +177,147 @@ QJsonArray normalizeEvents(const QJsonDocument& doc)
             source = obj.value(QStringLiteral("items")).toArray();
     }
 
+    std::function<QString(const QJsonValue&)> valueToString;
+    valueToString = [&](const QJsonValue& value) -> QString {
+        if (value.isString())
+            return value.toString();
+        if (value.isDouble()) {
+            const double number = value.toDouble();
+            const qint64 whole = static_cast<qint64>(number);
+            if (qFuzzyIsNull(number - static_cast<double>(whole)))
+                return QString::number(whole);
+            return QString::number(number, 'f', 3);
+        }
+        if (value.isBool())
+            return value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+        if (value.isObject()) {
+            const QJsonObject nested = value.toObject();
+            if (nested.contains(QStringLiteral("name")))
+                return valueToString(nested.value(QStringLiteral("name")));
+            if (nested.contains(QStringLiteral("label")))
+                return valueToString(nested.value(QStringLiteral("label")));
+            if (nested.contains(QStringLiteral("value")))
+                return valueToString(nested.value(QStringLiteral("value")));
+            if (nested.contains(QStringLiteral("id")))
+                return valueToString(nested.value(QStringLiteral("id")));
+        }
+        return {};
+    };
+
     QJsonArray normalized;
     for (const auto& entry : source) {
         const QJsonObject obj = entry.toObject();
         if (obj.isEmpty())
             continue;
 
-        QString time = toTimeString(obj.value(QStringLiteral("time")));
-        if (time.isEmpty())
-            time = toTimeString(obj.value(QStringLiteral("timestamp")));
-        if (time.isEmpty())
-            time = toTimeString(obj.value(QStringLiteral("created_at")));
-        if (time.isEmpty())
-            time = toTimeString(obj.value(QStringLiteral("createdAt")));
+        const auto pickString = [&, valueToString](std::initializer_list<QString> keys) -> QString {
+            for (const QString& key : keys) {
+                if (!obj.contains(key))
+                    continue;
+                const QString value = valueToString(obj.value(key));
+                if (!value.isEmpty())
+                    return value;
+            }
+            return {};
+        };
 
-        QString label = obj.value(QStringLiteral("label")).toString();
-        if (label.isEmpty())
-            label = obj.value(QStringLiteral("type")).toString();
-        if (label.isEmpty())
-            label = obj.value(QStringLiteral("event")).toString();
-        if (label.isEmpty())
-            label = obj.value(QStringLiteral("event_type")).toString();
-        if (label.isEmpty())
-            label = obj.value(QStringLiteral("title")).toString();
-        if (label.isEmpty())
-            label = obj.value(QStringLiteral("category")).toString();
-        if (label.isEmpty())
-            label = obj.value(QStringLiteral("status")).toString();
+        QString eventType = pickString({
+            QStringLiteral("event_type"),
+            QStringLiteral("eventType"),
+            QStringLiteral("type"),
+            QStringLiteral("event"),
+            QStringLiteral("category")
+        }).trimmed().toLower();
+        if (eventType.isEmpty())
+            continue;
+        if (eventType != QStringLiteral("detect_start"))
+            continue;
 
-        QString camera = obj.value(QStringLiteral("camera")).toString();
-        if (camera.isEmpty())
-            camera = obj.value(QStringLiteral("camera_name")).toString();
-        if (camera.isEmpty())
-            camera = obj.value(QStringLiteral("cameraName")).toString();
-        if (camera.isEmpty())
-            camera = obj.value(QStringLiteral("source")).toString();
-        if (camera.isEmpty())
-            camera = obj.value(QStringLiteral("device")).toString();
-        if (camera.isEmpty()) {
-            const QJsonValue camId = obj.contains(QStringLiteral("cameraId")) ? obj.value(QStringLiteral("cameraId")) : obj.value(QStringLiteral("camera_id"));
-            if (camId.isDouble())
-                camera = QString::number(camId.toInt());
-            else
-                camera = camId.toString();
+        QString timestamp = toTimeString(obj.value(QStringLiteral("timestamp")));
+        if (timestamp.isEmpty())
+            timestamp = toTimeString(obj.value(QStringLiteral("time")));
+        if (timestamp.isEmpty())
+            timestamp = toTimeString(obj.value(QStringLiteral("created_at")));
+        if (timestamp.isEmpty())
+            timestamp = toTimeString(obj.value(QStringLiteral("createdAt")));
+        if (timestamp.isEmpty())
+            timestamp = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+
+        QString personId = pickString({
+            QStringLiteral("person_id"),
+            QStringLiteral("personId")
+        });
+        if (personId.isEmpty()) {
+            const QJsonObject nested = obj.value(QStringLiteral("person")).toObject();
+            if (!nested.isEmpty())
+                personId = valueToString(nested.value(QStringLiteral("id")));
+        }
+
+        QString personLabel = pickString({
+            QStringLiteral("person_name"),
+            QStringLiteral("personName"),
+            QStringLiteral("person_label"),
+            QStringLiteral("label"),
+            QStringLiteral("name"),
+            QStringLiteral("title")
+        });
+        if (personLabel.isEmpty()) {
+            const QJsonObject nested = obj.value(QStringLiteral("person")).toObject();
+            if (!nested.isEmpty())
+                personLabel = valueToString(nested.value(QStringLiteral("name")));
+        }
+        if (personLabel.isEmpty())
+            personLabel = personId;
+
+        QString cameraId = pickString({
+            QStringLiteral("camera_id"),
+            QStringLiteral("cameraId")
+        });
+        QString cameraLabel = pickString({
+            QStringLiteral("camera_name"),
+            QStringLiteral("cameraName"),
+            QStringLiteral("camera_label"),
+            QStringLiteral("camera"),
+            QStringLiteral("source"),
+            QStringLiteral("device")
+        });
+        if (cameraLabel.isEmpty()) {
+            const QJsonObject nested = obj.value(QStringLiteral("camera")).toObject();
+            if (!nested.isEmpty())
+                cameraLabel = valueToString(nested.value(QStringLiteral("name")));
+        }
+        if (cameraLabel.isEmpty())
+            cameraLabel = cameraId;
+
+        double confidence = -1.0;
+        const QJsonValue confidenceValue = obj.value(QStringLiteral("confidence"));
+        if (confidenceValue.isDouble()) {
+            confidence = confidenceValue.toDouble();
+        } else if (confidenceValue.isString()) {
+            bool ok = false;
+            const double parsed = confidenceValue.toString().toDouble(&ok);
+            if (ok)
+                confidence = parsed;
         }
 
         QJsonObject normalizedEvent;
-        if (!time.isEmpty())
-            normalizedEvent.insert(QStringLiteral("time"), time);
-        if (!label.isEmpty())
-            normalizedEvent.insert(QStringLiteral("label"), label);
-        if (!camera.isEmpty())
-            normalizedEvent.insert(QStringLiteral("camera"), camera);
+        normalizedEvent.insert(QStringLiteral("event_type"), QStringLiteral("detect_start"));
+        normalizedEvent.insert(QStringLiteral("time"), timestamp);
+        const QString eventLabel = QStringLiteral("detect face");
+        normalizedEvent.insert(QStringLiteral("event"), eventLabel);
+        normalizedEvent.insert(QStringLiteral("label"), eventLabel);
+        if (!personLabel.isEmpty())
+            normalizedEvent.insert(QStringLiteral("person"), personLabel);
+        if (!personId.isEmpty())
+            normalizedEvent.insert(QStringLiteral("person_id"), personId);
+        if (!cameraLabel.isEmpty())
+            normalizedEvent.insert(QStringLiteral("camera"), cameraLabel);
+        if (!cameraId.isEmpty())
+            normalizedEvent.insert(QStringLiteral("camera_id"), cameraId);
+        if (confidence >= 0.0)
+            normalizedEvent.insert(QStringLiteral("confidence"), confidence);
 
-        if (!normalizedEvent.isEmpty())
-            normalized.append(normalizedEvent);
+        normalized.append(normalizedEvent);
     }
 
     return normalized;
@@ -333,7 +423,7 @@ void MainWindow::setupUi()
     modelInfoLabel->setObjectName("modelInfoLabel");
     modelInfoLabel->setStyleSheet("font-size:11px; color:#94a3b8;");
     modelInfoLabel->setAlignment(Qt::AlignVCenter);
-    btnSync = new QPushButton(QStringLiteral("⟳"));
+    btnSync = new QPushButton;
     titleLabel->setObjectName("titleLabel");
     btnThemeToggle = new QPushButton(tr("Dark"));
     btnThemeToggle->setObjectName("btnThemeToggle");
@@ -348,6 +438,11 @@ void MainWindow::setupUi()
         b->setFixedSize(32, 28);
         b->setFlat(true);
     }
+    btnSync->setText(QString());
+    btnSettings->setText(QString());
+    btnMinimize->setText(QString());
+    btnMaximize->setText(QString());
+    btnClose->setText(QString());
     btnSync->setToolTip(tr("Sync now"));
     btnThemeToggle->setFixedHeight(28);
     btnThemeToggle->setMinimumWidth(72);
@@ -365,6 +460,8 @@ void MainWindow::setupUi()
     titleLayout->addWidget(btnMaximize);
     titleLayout->addWidget(btnClose);
 
+    refreshTitleBarIcons();
+
     // ==== content ====
     QHBoxLayout* centerLayout = new QHBoxLayout;
     centerLayout->setContentsMargins(4, 4, 4, 4);
@@ -372,24 +469,36 @@ void MainWindow::setupUi()
 
     listModes = new QListWidget;
     listModes->setObjectName("listModes");
-    listModes->addItems({
-        "?? Dashboard",
-        "?? Live Cameras",
-        "?? Face Database",
-        "?? 3D Face Viewer",
-        "?? AI Analytics",
-        "?? Settings"
-        });
+    struct ModeDefinition {
+        const char* label;
+        const char* iconName;
+    };
+    const ModeDefinition modeDefinitions[] = {
+        { "Dashboard", "dashboard" },
+        { "Live Cameras", "camera" },
+        { "Face Database", "gallery" },
+        { "3D Face Viewer", "3d" },
+        { "AI Analytics", "ai" },
+        { "Settings", "settings" }
+    };
+    navigationModes.clear();
+    listModes->clear();
+    for (const auto& entry : modeDefinitions) {
+        QListWidgetItem* item = new QListWidgetItem(themedIcon(entry.iconName), tr(entry.label));
+        listModes->addItem(item);
+        navigationModes.append({ item, QString::fromUtf8(entry.iconName) });
+    }
     listModes->setFixedWidth(220);
+    refreshNavigationIcons();
 
     stackedWidget = new QStackedWidget;
     stackedWidget->setObjectName("stackedWidget");
 
     dashboardPage = new DashboardPage;
+    dashboardPage->applyTheme((currentTheme == Theme::Dark) ? DashboardPage::Theme::Dark : DashboardPage::Theme::Light);
     modelsDirectory = QCoreApplication::applicationDirPath() + QStringLiteral("/assets/models");
     modelSettings = ModelSettings::load();
 
-    auto dashboard = new DashboardPage;
     cameraManager = new CameraManager(this);
     aiProcessor = new AIProcessor();
 
@@ -577,15 +686,15 @@ void MainWindow::setupSettingsPopup()
     QLabel* recognitionLabel = new QLabel(tr("Face recognition interval (ms)"), settingsPopup);
     recognitionLabel->setObjectName("recognitionLabel");
     recognitionSlider = new QSlider(Qt::Horizontal, settingsPopup);
-    recognitionSlider->setRange(100, 3000);
-    recognitionSlider->setSingleStep(50);
+    recognitionSlider->setRange(0, 3000);
+    recognitionSlider->setSingleStep(20);
     recognitionSlider->setPageStep(100);
     recognitionValueLabel = new QLabel(settingsPopup);
     recognitionValueLabel->setObjectName("recognitionValueLabel");
 
     gpuToggle = new QCheckBox(tr("Use GPU acceleration (OpenVINO)"), settingsPopup);
     recognitionSlider->setValue(cachedRecognitionInterval);
-    recognitionValueLabel->setText(QStringLiteral("%1 ms").arg(cachedRecognitionInterval));
+    recognitionValueLabel->setText(cachedRecognitionInterval == 0 ? tr("Instant") : tr("%1 ms").arg(cachedRecognitionInterval));
     gpuToggle->setChecked(cachedGpuPreference);
 
     popupLayout->addWidget(recognitionLabel);
@@ -701,6 +810,12 @@ void MainWindow::applyTheme(Theme theme)
         }
     }
 
+    if (dashboardPage)
+        dashboardPage->applyTheme((theme == Theme::Dark) ? DashboardPage::Theme::Dark : DashboardPage::Theme::Light);
+
+    refreshTitleBarIcons();
+    refreshNavigationIcons();
+
     updateMaximizeIcon(isMaximized);
 }
 
@@ -744,6 +859,38 @@ QString MainWindow::loadStylesheet(const QString& path) const
     return QString::fromUtf8(file.readAll());
 }
 
+QString MainWindow::themedIconPath(const QString& base) const
+{
+    const bool useDarkGlyphs = (currentTheme == Theme::Light);
+    const QString suffix = useDarkGlyphs ? QStringLiteral("_dark.png") : QStringLiteral("_light.png");
+    return QStringLiteral(":/resources/icons/") + base + suffix;
+}
+
+QIcon MainWindow::themedIcon(const QString& base) const
+{
+    return QIcon(themedIconPath(base));
+}
+
+void MainWindow::refreshTitleBarIcons()
+{
+    if (btnMinimize)
+        btnMinimize->setIcon(themedIcon(QStringLiteral("minimize")));
+    if (btnSync)
+        btnSync->setIcon(themedIcon(QStringLiteral("refresh")));
+    if (btnClose)
+        btnClose->setIcon(themedIcon(QStringLiteral("close")));
+    if (btnSettings)
+        btnSettings->setIcon(themedIcon(QStringLiteral("settings")));
+}
+
+void MainWindow::refreshNavigationIcons()
+{
+    for (const NavigationMode& entry : navigationModes) {
+        if (entry.item)
+            entry.item->setIcon(themedIcon(entry.iconName));
+    }
+}
+
 // === Slots ===
 void MainWindow::onModeChanged(int index)
 {
@@ -765,17 +912,10 @@ void MainWindow::onModeChanged(int index)
  */
 void MainWindow::updateMaximizeIcon(bool maxed)
 {
-    const bool isLight = (currentTheme == Theme::Light);
-    QString path;
-    if (maxed)
-        path = isLight
-        ? ":/resources/icons/icons-for-window/minimize-black.png"
-        : ":/resources/icons/icons-for-window/minimize-white.png";
-    else
-        path = isLight
-        ? ":/resources/icons/icons-for-window/maximize-black.png"
-        : ":/resources/icons/icons-for-window/maximize-white.png";
-    btnMaximize->setIcon(QIcon(path));
+    if (!btnMaximize)
+        return;
+    const QString iconName = maxed ? QStringLiteral("collapse") : QStringLiteral("expand");
+    btnMaximize->setIcon(themedIcon(iconName));
 }
 
 /**
@@ -814,7 +954,7 @@ void MainWindow::handleRecognitionSlider(int value)
 {
     cachedRecognitionInterval = value;
     if (recognitionValueLabel)
-        recognitionValueLabel->setText(QStringLiteral("%1 ms").arg(value));
+        recognitionValueLabel->setText(value == 0 ? tr("Instant") : tr("%1 ms").arg(value));
     if (aiProcessor)
         QMetaObject::invokeMethod(aiProcessor, "setRecognitionIntervalMs", Qt::QueuedConnection, Q_ARG(int, value));
 }
@@ -859,7 +999,7 @@ void MainWindow::refreshSettingsUi()
         const QSignalBlocker blocker(recognitionSlider);
         recognitionSlider->setValue(interval);
         if (recognitionValueLabel)
-            recognitionValueLabel->setText(QStringLiteral("%1 ms").arg(interval));
+            recognitionValueLabel->setText(interval == 0 ? tr("Instant") : tr("%1 ms").arg(interval));
     }
 
     if (gpuToggle) {
@@ -1170,13 +1310,34 @@ QJsonObject MainWindow::composeDashboardPayload() const
     }
     payload.insert(QStringLiteral("activity"), activity);
 
-    // derive counts from activity/events when summary fields missing
-    if (payload.value(QStringLiteral("detections")).toInt() == 0 && !dashboardState.hourlyDetections.isEmpty()) {
-        int sum = 0;
-        for (int v : dashboardState.hourlyDetections)
-            sum += v;
-        payload.insert(QStringLiteral("detections"), sum);
+    const auto parseIsoDate = [](const QString& iso) -> QDate {
+        if (iso.isEmpty())
+            return {};
+        QDateTime dt = QDateTime::fromString(iso, Qt::ISODateWithMs);
+        if (!dt.isValid())
+            dt = QDateTime::fromString(iso, Qt::ISODate);
+        if (!dt.isValid())
+            dt = QDateTime::fromString(iso, Qt::RFC2822Date);
+        if (!dt.isValid())
+            return {};
+        return dt.toLocalTime().date();
+    };
+
+    const QDate today = QDate::currentDate();
+    int detectionsToday = 0;
+    for (const auto& eventValue : dashboardState.events) {
+        if (!eventValue.isObject())
+            continue;
+        const QJsonObject obj = eventValue.toObject();
+        const QString type = obj.value(QStringLiteral("event_type")).toString(QStringLiteral("detect_start"));
+        if (type.compare(QStringLiteral("detect_start"), Qt::CaseInsensitive) != 0)
+            continue;
+        const QDate eventDate = parseIsoDate(obj.value(QStringLiteral("time")).toString());
+        if (eventDate.isValid() && eventDate == today)
+            ++detectionsToday;
     }
+    payload.insert(QStringLiteral("detections_today"), detectionsToday);
+    payload.insert(QStringLiteral("detections"), detectionsToday);
 
     const int eventsCount = dashboardState.events.size();
     if (payload.value(QStringLiteral("alerts")).toInt() == 0 && eventsCount > 0)
@@ -1458,6 +1619,7 @@ void MainWindow::initializeServerSync(const LoginSession& session)
     if (session.auth.success && !session.auth.token.isEmpty())
         serverSync->applySessionToken(session.auth.token, session.auth.expiresAt);
     serverSync->start();
+    serverSync->requestImmediateEmbeddingsRefresh();
     qInfo() << "[MainWindow]" << "Server synchronization initialized";
 
     // Reuse the same session for dashboard stats polling.
@@ -1488,4 +1650,5 @@ void MainWindow::handleManualSync()
         return;
     qInfo() << "[MainWindow]" << "Manual sync requested by user";
     serverSync->requestImmediatePersonsRefresh();
+    serverSync->requestImmediateEmbeddingsRefresh();
 }

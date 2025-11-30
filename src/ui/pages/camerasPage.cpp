@@ -101,7 +101,7 @@ void CamerasPage::setupUi()
     mainLayout->addWidget(remoteCameraList);
 }
 
-void CamerasPage::addCameraSource(const QString& source, const QString& title, bool registerOnServer)
+void CamerasPage::addCameraSource(const QString& source, const QString& title, bool registerOnServer, bool startActive, const QString& initialStatus)
 {
     if (source.isEmpty() || !cameraManager)
         return;
@@ -132,10 +132,13 @@ void CamerasPage::addCameraSource(const QString& source, const QString& title, b
         QMutexLocker locker(&detectionMutex);
         cameraStates.remove(id);
     }
-    view->setCameraActive(true);
+    view->setCameraActive(startActive);
+    if (!initialStatus.isEmpty())
+        view->setStatusText(initialStatus);
     view->setAudioVisible(true);
 
-    cameraManager->startCapture(id);
+    if (startActive)
+        cameraManager->startCapture(id);
     updateGrid();
 
     if (registerOnServer)
@@ -334,7 +337,11 @@ void CamerasPage::openRemoteCamera(const CameraRecord& record)
     if (record.streamUrl.isEmpty())
         return;
     const QString label = record.name.isEmpty() ? record.streamUrl : record.name;
-    addCameraSource(record.streamUrl, label, false);
+    const bool startActive = record.status.compare(QStringLiteral("offline"), Qt::CaseInsensitive) != 0;
+    QString statusText;
+    if (!record.status.isEmpty())
+        statusText = tr("Server status: %1").arg(record.status);
+    addCameraSource(record.streamUrl, label, false, startActive, statusText);
 }
 
 void CamerasPage::handleRemoteCameraDoubleClick(QListWidgetItem* item)

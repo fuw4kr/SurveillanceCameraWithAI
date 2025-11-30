@@ -6,6 +6,7 @@
 
 #include "AIProcessor.h"
 #include "ServerSyncManager.h"
+#include <QDebug>
 
 DetectionEventController::DetectionEventController(AIProcessor* processor, ServerSyncManager* sync, QObject* parent, int timeoutMsValue)
     : QObject(parent)
@@ -30,7 +31,7 @@ void DetectionEventController::flushExpired(const QDateTime& nowUtc)
     auto it = activeEvents.begin();
     while (it != activeEvents.end()) {
         if (it->lastSeen.msecsTo(nowUtc) > timeoutMs) {
-            serverSync->sendDetectionStatus(it->personId, it->cameraId, false, it->lastSeen);
+            serverSync->sendDetectionStatus(it->personId, it->cameraId, false, it->lastSeen, it->snapshot, it->confidence);
             it = activeEvents.erase(it);
         } else {
             ++it;
@@ -63,10 +64,25 @@ void DetectionEventController::handleFrame(int cameraId, const QImage&, const QV
             evt.cameraId = cameraId;
             evt.startTime = nowUtc;
             evt.lastSeen = nowUtc;
+            QImage snapshot;
+            if (!detection.previewPath.isEmpty())
+                snapshot = QImage(detection.previewPath);
+            if (snapshot.isNull()) {
+                qWarning() << "[DetectionEventController]" << "Skipping event start without snapshot for" << detection.label;
+                continue;
+            }
+            evt.snapshot = snapshot;
+            evt.confidence = detection.confidence;
             activeEvents.insert(key, evt);
-            serverSync->sendDetectionStatus(personId, cameraId, true, nowUtc);
+            serverSync->sendDetectionStatus(personId, cameraId, true, nowUtc, snapshot, detection.confidence);
         } else {
             it->lastSeen = nowUtc;
+            if (!detection.previewPath.isEmpty()) {
+                QImage snapshot(detection.previewPath);
+                if (!snapshot.isNull())
+                    it->snapshot = snapshot;
+            }
+            it->confidence = detection.confidence;
         }
     }
 

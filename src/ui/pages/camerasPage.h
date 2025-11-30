@@ -100,7 +100,7 @@ signals:
 private:
     void setupUi();
     void updateGrid();
-    void addCameraSource(const QString& source, const QString& title, bool registerOnServer = true);
+    void addCameraSource(const QString& source, const QString& title, bool registerOnServer = true, bool startActive = true, const QString& initialStatus = QString());
     void updateRemoteListView();
     void publishCameraToServer(const QString& name, const QString& streamUrl);
     void openRemoteCamera(const CameraRecord& record);
