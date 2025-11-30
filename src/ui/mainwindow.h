@@ -295,6 +295,7 @@ private:
     DashboardDataState dashboardState;
     int pendingDashboardRequests = 0;
     QDateTime lastDashboardFetch;
+    LoginSession currentLoginSession;
 
     // === Setup ===
     void setupUi();
