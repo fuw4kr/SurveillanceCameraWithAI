@@ -1196,16 +1196,17 @@ void MainWindow::refreshAuthToken()
         qWarning() << "Cannot refresh auth token: Supabase client not available";
         return;
     }
-
-    const QString email = qEnvironmentVariable("APP_EMAIL");
-    const QString password = qEnvironmentVariable("APP_PASSWORD");
-    if (email.isEmpty() || password.isEmpty()) {
-        qWarning() << "Auth token missing; set APP_EMAIL/APP_PASSWORD to refresh automatically.";
+    if (currentLoginSession.auth.success && !currentLoginSession.auth.token.isEmpty()) {
+        supabaseClient->applySession(currentLoginSession.auth.token, currentLoginSession.auth.expiresAt);
+        fetchDashboard();
         return;
     }
-
-    authRefreshInFlight = true;
-    supabaseClient->login(email, password);
+    if (!currentLoginSession.email.isEmpty() && !currentLoginSession.password.isEmpty()) {
+        authRefreshInFlight = true;
+        supabaseClient->login(currentLoginSession.email, currentLoginSession.password);
+    } else {
+        qWarning() << "Auth token missing; provide login session to refresh automatically.";
+    }
 }
 
 /**
@@ -1226,6 +1227,7 @@ void MainWindow::handleAuthResult(const AuthResult& result)
         return;
     }
 
+    currentLoginSession.auth = result;
     if (supabaseClient)
         supabaseClient->applySession(result.token, result.expiresAt);
     fetchDashboard();
@@ -1422,12 +1424,24 @@ void MainWindow::initializeServerSync(const LoginSession& session)
 {
     if (!serverSync)
         return;
+    currentLoginSession = session;
     if (!session.email.isEmpty() || !session.password.isEmpty())
         serverSync->setCredentials(session.email, session.password);
     if (session.auth.success && !session.auth.token.isEmpty())
         serverSync->applySessionToken(session.auth.token, session.auth.expiresAt);
     serverSync->start();
     qInfo() << "[MainWindow]" << "Server synchronization initialized";
+
+    // Reuse the same session for dashboard stats polling.
+    if (supabaseClient) {
+        if (session.auth.success && !session.auth.token.isEmpty()) {
+            supabaseClient->applySession(session.auth.token, session.auth.expiresAt);
+            fetchDashboard();
+        } else if (!session.email.isEmpty() && !session.password.isEmpty()) {
+            authRefreshInFlight = true;
+            supabaseClient->login(session.email, session.password);
+        }
+    }
 }
 
 /**
