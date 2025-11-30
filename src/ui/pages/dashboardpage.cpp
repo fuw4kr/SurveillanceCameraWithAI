@@ -40,9 +40,13 @@ void DashboardPage::setupUi()
     cardsLayout->setSpacing(20);
 
     lblCameras = new QLabel("0");
+    lblCameras->setObjectName(QStringLiteral("lblCameras"));
     lblDetections = new QLabel("0");
+    lblDetections->setObjectName(QStringLiteral("lblDetections"));
     lblAlerts = new QLabel("0");
+    lblAlerts->setObjectName(QStringLiteral("lblAlerts"));
     lblAIStatus = new QLabel("Inactive");
+    lblAIStatus->setObjectName(QStringLiteral("lblAIStatus"));
 
     cardsLayout->addWidget(createCard("Active Cameras ??", lblCameras, QColor("#3B82F6")));
     cardsLayout->addWidget(createCard("Detections Today ?????", lblDetections, QColor("#10B981")));
@@ -153,6 +157,7 @@ void DashboardPage::setupChart()
     series->attachAxis(axisY);
 
     chartView = new QChartView(chart);
+    chartView->setObjectName(QStringLiteral("dashboardChart"));
     chartView->setRenderHint(QPainter::Antialiasing);
     chartView->setMinimumHeight(250);
 }
@@ -161,6 +166,7 @@ void DashboardPage::setupChart()
 void DashboardPage::setupTable()
 {
     tableEvents = new QTableWidget(0, 3);
+    tableEvents->setObjectName(QStringLiteral("eventsTable"));
     QStringList headers = { "Time", "Event", "Camera" };
     tableEvents->setHorizontalHeaderLabels(headers);
     tableEvents->verticalHeader()->hide();

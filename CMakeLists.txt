@@ -19,7 +19,7 @@ endif()
 find_package(OpenCV REQUIRED)
 
 
-find_package(Qt6 COMPONENTS Widgets Charts Network OpenGL Multimedia Svg Concurrent 3DCore 3DExtras 3DInput 3DRender REQUIRED)
+find_package(Qt6 COMPONENTS Widgets Charts Network OpenGL Multimedia Svg Concurrent 3DCore 3DExtras 3DInput 3DRender Test REQUIRED)
 
 find_package(FFMPEG REQUIRED)
 include_directories(${FFMPEG_INCLUDE_DIRS})
@@ -293,6 +293,8 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 # ======================================================
 # === Інформаційний вивід
 # ======================================================
+add_subdirectory(tests)
+
 get_target_property(QtCore_location Qt6::Core LOCATION)
 message(STATUS "==== Qt6 DETECTED ====")
 message(STATUS "QtCore location: ${QtCore_location}")
