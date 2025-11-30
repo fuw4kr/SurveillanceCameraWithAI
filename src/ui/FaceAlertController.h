@@ -55,6 +55,8 @@ struct PendingFaceAlert {
 class FaceAlertController : public QObject
 {
     Q_OBJECT
+
+    friend class FaceAlertControllerTest;
 public:
     /**
      * @brief Constructs the controller and wires AI/server signals.

@@ -42,11 +42,13 @@ void AudioStreamPlayer::run()
     AVFormatContext* fmtCtx = nullptr;
     if (avformat_open_input(&fmtCtx, streamUrl.toStdString().c_str(), nullptr, nullptr) < 0) {
         qWarning() << "❌ Failed to open audio stream:" << streamUrl;
+        emit errorOccurred("❌ Failed to open audio stream:");
         return;
     }
 
     if (avformat_find_stream_info(fmtCtx, nullptr) < 0) {
         qWarning() << "❌ Failed to find stream info";
+        emit errorOccurred("❌ Failed to find stream info");
         avformat_close_input(&fmtCtx);
         return;
     }
@@ -62,6 +64,8 @@ void AudioStreamPlayer::run()
 
     if (audioStreamIndex == -1) {
         qWarning() << "❌ No audio stream found";
+        emit errorOccurred("❌ No audio stream found");
+
         avformat_close_input(&fmtCtx);
         return;
     }
@@ -70,6 +74,8 @@ void AudioStreamPlayer::run()
     const AVCodec* codec = avcodec_find_decoder(codecPar->codec_id);
     if (!codec) {
         qWarning() << "❌ Unsupported audio codec";
+        emit errorOccurred("❌ Unsupported audio codec");
+
         avformat_close_input(&fmtCtx);
         return;
     }
@@ -77,6 +83,8 @@ void AudioStreamPlayer::run()
     AVCodecContext* codecCtx = avcodec_alloc_context3(codec);
     if (avcodec_parameters_to_context(codecCtx, codecPar) < 0) {
         qWarning() << "❌ Failed to copy codec parameters";
+        emit errorOccurred("❌ Failed to copy codec parameters");
+
         avcodec_free_context(&codecCtx);
         avformat_close_input(&fmtCtx);
         return;
@@ -84,6 +92,8 @@ void AudioStreamPlayer::run()
 
     if (avcodec_open2(codecCtx, codec, nullptr) < 0) {
         qWarning() << "❌ Failed to open codec";
+        emit errorOccurred("❌ Failed to open codec");
+
         avcodec_free_context(&codecCtx);
         avformat_close_input(&fmtCtx);
         return;
@@ -93,6 +103,8 @@ void AudioStreamPlayer::run()
     SwrContext* swrCtx = swr_alloc();
     if (!swrCtx) {
         qWarning() << "❌ Failed to alloc SwrContext";
+        emit errorOccurred("❌ Failed to alloc SwrContext");
+
         avcodec_free_context(&codecCtx);
         avformat_close_input(&fmtCtx);
         return;

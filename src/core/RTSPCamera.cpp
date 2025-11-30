@@ -12,7 +12,7 @@ RTSPCamera::RTSPCamera(int id, QString name, QString url, QObject* parent)
     , cameraName(std::move(name))
     , rtspUrl(std::move(url))
     , videoDecoder(new FFVideoDecoder(id, this))
-    , audioPlayer(new AudioStreamPlayer(this))
+    , audioPlayer(new AudioStreamPlayer(rtspUrl, this))
 {
     fpsTimer.start();
 
@@ -40,7 +40,7 @@ void RTSPCamera::start()
         videoDecoder->start(rtspUrl);
 
     if (!isLocalSource() && audioEnabled && !audioPlayer->isRunning())
-        audioPlayer->start(rtspUrl);
+        audioPlayer->start(); 
 }
 
 void RTSPCamera::stop()
@@ -56,8 +56,9 @@ void RTSPCamera::enableAudio(bool enable)
     audioEnabled = enable && !isLocalSource();
     if (audioEnabled) {
         if (!audioPlayer->isRunning())
-            audioPlayer->start(rtspUrl);
-    } else {
+            audioPlayer->start(); 
+    }
+    else {
         audioPlayer->stop();
     }
 }
