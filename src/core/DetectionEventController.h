@@ -21,6 +21,8 @@
 #include <QVector>
 #include <QSize>
 
+#include "AIProcessor.h"
+
 class AIProcessor;
 class ServerSyncManager;
 struct Detection;
