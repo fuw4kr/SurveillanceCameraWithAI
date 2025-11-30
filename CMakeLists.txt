@@ -106,6 +106,7 @@ if (WIN32 AND USE_ORT_OPENVINO)
         IMPORTED_LOCATION "${ORT_OV_LIB_DIR}/onnxruntime.dll"
     )
     target_include_directories(onnxruntime-openvino INTERFACE "${ORT_OV_INCLUDE}")
+    set(ONNX_RUNTIME_INCLUDE_DIR "${ORT_OV_INCLUDE}" CACHE PATH "ONNX Runtime include directory")
     set(ONNX_RUNTIME_TARGET onnxruntime-openvino)
 
     file(GLOB ORT_OV_DLLS "${ORT_OV_LIB_DIR}/*.dll")
@@ -133,6 +134,7 @@ else()
             IMPORTED_LOCATION_DEBUG "${ONNXRUNTIME_DLL_DEBUG}"
         )
         target_include_directories(onnxruntime-vcpkg INTERFACE "${_ORT_VCPKG_ROOT}/include")
+        set(ONNX_RUNTIME_INCLUDE_DIR "${_ORT_VCPKG_ROOT}/include" CACHE PATH "ONNX Runtime include directory")
         set(ONNX_RUNTIME_TARGET onnxruntime-vcpkg)
     else()
         message(WARNING "onnxruntime libraries not found via vcpkg; AI features may fail to link")
