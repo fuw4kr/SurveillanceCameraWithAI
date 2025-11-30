@@ -69,6 +69,8 @@ private:
         int cameraId = -1;
         QDateTime startTime;
         QDateTime lastSeen;
+        QImage snapshot;
+        float confidence = 0.0f;
     };
 
     QString keyFor(const QString& personId, int cameraId) const;

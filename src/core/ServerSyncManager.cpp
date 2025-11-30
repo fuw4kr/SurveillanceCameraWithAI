@@ -8,6 +8,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QFile>
+#include <QBuffer>
 #include <QFileInfo>
 #include <QDir>
 #include <QJsonArray>
@@ -142,21 +143,49 @@ void ServerSyncManager::submitCameraRecord(const QString& name, const QString& s
     client->createCamera(label, streamUrl, ipAddress, location);
 }
 
-void ServerSyncManager::sendDetectionStatus(const QString& personId, int cameraId, bool active, const QDateTime& timestamp)
+static QString encodeSnapshot(const QImage& snapshot)
+{
+    if (snapshot.isNull())
+        return {};
+    QByteArray buffer;
+    QBuffer buf(&buffer);
+    buf.open(QIODevice::WriteOnly);
+    snapshot.save(&buf, "PNG");
+    return QStringLiteral("data:image/png;base64,%1").arg(QString::fromLatin1(buffer.toBase64()));
+}
+
+void ServerSyncManager::sendDetectionStatus(const QString& personId,
+    int cameraId,
+    bool active,
+    const QDateTime& timestamp,
+    const QImage& snapshot,
+    float confidence)
 {
     if (personId.isEmpty())
         return;
     if (!client->isAuthenticated() && !ensureAuthenticated())
         return;
+    const QString cameraUuid = cameraIdForLocal(cameraId);
+    if (cameraUuid.isEmpty()) {
+        qWarning() << "[ServerSync]" << "Cannot post detection event: unknown camera id for" << cameraId;
+        return;
+    }
+    if (active && snapshot.isNull()) {
+        qWarning() << "[ServerSync]" << "Skipping detect_start event without snapshot for person" << personId;
+        return;
+    }
     EventPayload payload;
-    payload.eventType = active ? QStringLiteral("face_detected") : QStringLiteral("face_lost");
+    payload.eventType = active ? QStringLiteral("detect_start") : QStringLiteral("detect_end");
     payload.personId = personId;
     const QString source = cameraSourceForLocal(cameraId);
     payload.cameraLabel = source.isEmpty() ? QStringLiteral("Camera %1").arg(cameraId) : source;
-    payload.cameraId = cameraIdForStream(source);
+    payload.cameraId = cameraUuid;
     payload.timestamp = timestamp.isValid() ? timestamp : QDateTime::currentDateTimeUtc();
+    payload.confidence = confidence;
+    if (!snapshot.isNull())
+        payload.snapshotUrl = encodeSnapshot(snapshot);
     client->postEvent(payload);
-    qInfo() << "[ServerSync]" << payload.eventType << "reported for person" << personId << "camera" << (payload.cameraId.isEmpty() ? QString::number(cameraId) : payload.cameraId);
+    qInfo() << "[ServerSync]" << payload.eventType << "reported for person" << personId << "camera" << cameraUuid;
 }
 
 void ServerSyncManager::renamePerson(const QString& personId, const QString& newName)
@@ -645,27 +674,8 @@ QString ServerSyncManager::cameraIdForLocal(int cameraId) const
 
 void ServerSyncManager::enqueueDetections(int cameraId, const QVector<Detection>& detections)
 {
-    if (detections.isEmpty())
-        return;
-
-    const QDateTime now = QDateTime::currentDateTimeUtc();
-    for (const Detection& detection : detections) {
-        EventPayload payload;
-        const QString category = detection.category.isEmpty() ? QStringLiteral("Detection") : detection.category;
-        payload.eventType = QStringLiteral("%1:%2").arg(category, detection.label);
-        payload.detectionLabel = detection.label;
-        payload.category = detection.category;
-        payload.confidence = detection.confidence;
-        const QString source = cameraSourceForLocal(cameraId);
-        payload.cameraLabel = source.isEmpty() ? (cameraId >= 0 ? QString::number(cameraId) : QString()) : source;
-        payload.cameraId = cameraIdForStream(source);
-        payload.timestamp = now;
-        eventQueue.enqueue({ payload, 0 });
-        if (eventQueue.size() > maxEventQueueSize)
-            eventQueue.dequeue();
-    }
-
-    flushEventQueue();
+    Q_UNUSED(cameraId);
+    Q_UNUSED(detections);
 }
 
 void ServerSyncManager::flushEventQueue()

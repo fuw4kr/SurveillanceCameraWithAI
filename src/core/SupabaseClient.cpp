@@ -12,6 +12,7 @@
 #include <QNetworkRequest>
 #include <QStringList>
 #include <QVariant>
+#include <QSet>
 
 namespace {
 QString ensureLeadingSlash(const QString& path)
@@ -168,22 +169,40 @@ void SupabaseClient::postEvent(const EventPayload& event)
         emit eventPostFailed(event, QStringLiteral("Not authenticated"));
         return;
     }
-    const QString cameraRef = event.cameraId.isEmpty() ? event.cameraLabel : event.cameraId;
-    qInfo().noquote() << "[Supabase] Posting event" << event.eventType << "camera:" << cameraRef << "confidence:" << event.confidence;
+    static const QSet<QString> allowedTypes = {
+        QStringLiteral("detect_start"),
+        QStringLiteral("detect_end"),
+        QStringLiteral("alert")
+    };
+    const QString type = event.eventType.isEmpty() ? QStringLiteral("alert") : event.eventType;
+    if (!allowedTypes.contains(type)) {
+        emit eventPostFailed(event, QStringLiteral("Unsupported event type: %1").arg(type));
+        return;
+    }
+    if (event.cameraId.isEmpty()) {
+        emit eventPostFailed(event, QStringLiteral("Missing camera id"));
+        return;
+    }
+    if (event.personId.isEmpty()) {
+        emit eventPostFailed(event, QStringLiteral("Missing person id"));
+        return;
+    }
+    if (type == QStringLiteral("detect_start") && event.snapshotUrl.isEmpty()) {
+        emit eventPostFailed(event, QStringLiteral("Missing snapshot for detect_start event"));
+        return;
+    }
+    const QString cameraRef = event.cameraId;
+    qInfo().noquote() << "[Supabase] Posting event" << type << "camera:" << cameraRef << "person:" << event.personId;
     QNetworkRequest req = authorizedRequest(QStringLiteral("/api/events"));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     QJsonObject payload;
-    const QString eventType = event.eventType.isEmpty()
-        ? QStringLiteral("Detection")
-        : event.eventType;
-    payload.insert(QStringLiteral("event_type"), eventType);
-    if (!event.personId.isEmpty())
-        payload.insert(QStringLiteral("person_id"), event.personId);
-    if (!event.cameraId.isEmpty())
-        payload.insert(QStringLiteral("camera_id"), event.cameraId);
+    payload.insert(QStringLiteral("event_type"), type);
+    payload.insert(QStringLiteral("camera_id"), event.cameraId);
+    payload.insert(QStringLiteral("person_id"), event.personId);
     if (event.confidence > 0.0f)
         payload.insert(QStringLiteral("confidence"), event.confidence);
-    if (!event.timestamp.isNull())
-        payload.insert(QStringLiteral("timestamp"), event.timestamp.toUTC().toString(Qt::ISODateWithMs));
+    const QDateTime timestamp = event.timestamp.isValid() ? event.timestamp.toUTC() : QDateTime::currentDateTimeUtc();
+    payload.insert(QStringLiteral("timestamp"), timestamp.toString(Qt::ISODateWithMs));
     if (!event.snapshotUrl.isEmpty())
         payload.insert(QStringLiteral("snapshot_url"), event.snapshotUrl);
 
@@ -245,45 +264,22 @@ void SupabaseClient::postAlert(const QString& alertType, const QString& message,
         return;
     }
     const QString resolvedSeverity = severity.isEmpty() ? QStringLiteral("medium") : severity;
+    QByteArray imageBytes;
     if (!snapshot.isNull()) {
-        QByteArray imageBytes;
         QBuffer buffer(&imageBytes);
         buffer.open(QIODevice::WriteOnly);
         snapshot.save(&buffer, "PNG");
-
-        QHttpMultiPart* multipart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
-        auto appendField = [&](const QString& name, const QString& value) {
-            QHttpPart part;
-            part.setHeader(QNetworkRequest::ContentDispositionHeader,
-                QVariant(QStringLiteral("form-data; name=\"%1\"").arg(name)));
-            part.setBody(value.toUtf8());
-            multipart->append(part);
-        };
-        appendField(QStringLiteral("alert_type"), alertType);
-        appendField(QStringLiteral("message"), message);
-        appendField(QStringLiteral("severity"), resolvedSeverity);
-
-        QHttpPart imagePart;
-        imagePart.setHeader(QNetworkRequest::ContentDispositionHeader,
-            QVariant(QStringLiteral("form-data; name=\"snapshot\"; filename=\"snapshot.png\"")));
-        imagePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("image/png")));
-        imagePart.setBody(imageBytes);
-        multipart->append(imagePart);
-
-        QNetworkRequest req = authorizedRequest(QStringLiteral("/api/alerts"), false);
-        QNetworkReply* reply = network.post(req, multipart);
-        multipart->setParent(reply);
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            handleAlertReply(reply);
-        });
-        return;
     }
-
     QNetworkRequest req = authorizedRequest(QStringLiteral("/api/alerts"));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     QJsonObject payload;
     payload.insert(QStringLiteral("alert_type"), alertType);
     payload.insert(QStringLiteral("message"), message);
     payload.insert(QStringLiteral("severity"), resolvedSeverity);
+    if (!imageBytes.isEmpty()) {
+        payload.insert(QStringLiteral("snapshot"),
+            QStringLiteral("data:image/png;base64,%1").arg(QString::fromLatin1(imageBytes.toBase64())));
+    }
     QNetworkReply* reply = network.post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         handleAlertReply(reply);

@@ -145,7 +145,12 @@ public:
      * @throws None
      * @example sync.sendDetectionStatus(id, 1, true, QDateTime::currentDateTimeUtc());
      */
-    void sendDetectionStatus(const QString& personId, int cameraId, bool active, const QDateTime& timestamp);
+    void sendDetectionStatus(const QString& personId,
+        int cameraId,
+        bool active,
+        const QDateTime& timestamp,
+        const QImage& snapshot = QImage(),
+        float confidence = -1.0f);
     /**
      * @brief Renames a person in the backend.
      * @param personId Person identifier.
