@@ -168,6 +168,7 @@ private slots:
     void handlePersonsDirectoryUpdated(const QList<PersonRecord>& persons);
 
 private:
+    friend class FaceAlertControllerTestAccessor;
     struct RecentFace {
         int cameraId = -1;
         QPoint center;

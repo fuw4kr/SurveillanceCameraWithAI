@@ -8,6 +8,7 @@
     "qtmultimedia",
     "qtsvg",
     "qttools",
-    "openssl"
+    "openssl",
+    "gtest"
   ]
 }

@@ -64,6 +64,7 @@ void CameraViewWidget::setupUi()
     removeButton->setObjectName("removeButton");
 
     previewLabel = new QLabel;
+    previewLabel->setObjectName("previewLabel");
     previewLabel->setMinimumSize(previewSize);
     previewLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     previewLabel->setAlignment(Qt::AlignCenter);
@@ -73,8 +74,10 @@ void CameraViewWidget::setupUi()
     statusLabel->setObjectName("statusLabel");
 
     toggleButton = new QPushButton(tr("Disable"));
+    toggleButton->setObjectName("toggleButton");
     toggleButton->setCheckable(true);
     audioCheck = new QCheckBox(tr("Audio"));
+    audioCheck->setObjectName("audioCheck");
 
     connect(toggleButton, &QPushButton::clicked, this, &CameraViewWidget::handleToggle);
     connect(audioCheck, &QCheckBox::toggled, this, &CameraViewWidget::handleAudio);
