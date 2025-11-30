@@ -205,6 +205,10 @@ private slots:
      * @example handleManualSync();
      */
     void handleManualSync();
+    void handleStatsSummary(const QJsonObject& summary);
+    void handleStatsDetections(const QJsonArray& detections);
+    void handleStatsEvents(const QJsonArray& events);
+    void handleStatsFailed(const QString& key, const QString& error);
 
 private:
     enum class Theme {
@@ -311,6 +315,7 @@ private:
     void fetchDashboard();
     void refreshAuthToken();
     QJsonObject composeDashboardPayload() const;
+    void finalizeDashboardPiece();
 };
 
 #endif // MAINWINDOW_H

@@ -860,6 +860,10 @@ void MainWindow::setupDashboardPolling()
         supabaseClient = new SupabaseClient(this);
         supabaseClient->setBaseUrl(apiBaseUrl);
         connect(supabaseClient, &SupabaseClient::loginFinished, this, &MainWindow::handleAuthResult);
+        connect(supabaseClient, &SupabaseClient::statsSummaryReceived, this, &MainWindow::handleStatsSummary);
+        connect(supabaseClient, &SupabaseClient::statsDetectionsByHourReceived, this, &MainWindow::handleStatsDetections);
+        connect(supabaseClient, &SupabaseClient::statsEventsReceived, this, &MainWindow::handleStatsEvents);
+        connect(supabaseClient, &SupabaseClient::statsFetchFailed, this, &MainWindow::handleStatsFailed);
     }
 
     if (!dashboardTimer) {
@@ -885,10 +889,10 @@ void MainWindow::setupDashboardPolling()
  */
 void MainWindow::fetchDashboard()
 {
-    if (dashboardRequestInFlight || !networkManager)
+    if (dashboardRequestInFlight || !supabaseClient)
         return;
 
-    if (authToken.isEmpty()) {
+    if (!supabaseClient->isAuthenticated()) {
         if (!authRefreshInFlight)
             refreshAuthToken();
         return;
@@ -896,23 +900,11 @@ void MainWindow::fetchDashboard()
 
     dashboardRequestInFlight = true;
     dashboardState.reset();
-    pendingDashboardRequests = 0;
+    pendingDashboardRequests = 3;
 
-    const auto issueRequest = [this](const QString& path, const QString& key) {
-        QUrl url = apiBaseUrl.resolved(QUrl(path));
-        QNetworkRequest request(url);
-        request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-        request.setRawHeader("Authorization", QByteArray("Bearer ") + authToken.toUtf8());
-
-        QNetworkReply* reply = networkManager->get(request);
-        reply->setProperty("dashboardKey", key);
-        ++pendingDashboardRequests;
-        connect(reply, &QNetworkReply::finished, this, &MainWindow::handleDashboardReply);
-    };
-
-    issueRequest(QStringLiteral("/api/stats/summary"), QStringLiteral("summary"));
-    issueRequest(QStringLiteral("/api/stats/detections-by-hour"), QStringLiteral("detections_by_hour"));
-    issueRequest(QStringLiteral("/api/stats/events"), QStringLiteral("events"));
+    supabaseClient->fetchStatsSummary();
+    supabaseClient->fetchStatsDetectionsByHour();
+    supabaseClient->fetchStatsEvents();
 }
 
 /**
@@ -934,23 +926,6 @@ void MainWindow::handleDashboardReply()
     const QString key = reply->property("dashboardKey").toString();
     const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 
-    auto finalize = [this]() {
-        pendingDashboardRequests = std::max(0, pendingDashboardRequests - 1);
-        if (pendingDashboardRequests == 0) {
-            dashboardRequestInFlight = false;
-            if (dashboardState.ready() && dashboardPage) {
-                const QJsonObject payload = composeDashboardPayload();
-                dashboardPage->applyDashboardData(payload);
-                lastDashboardFetch = QDateTime::currentDateTime();
-                qInfo() << "[Dashboard]" << "Refreshed"
-                        << lastDashboardFetch.toString(Qt::ISODate)
-                        << "cameras" << payload.value(QStringLiteral("cameras")).toInt()
-                        << "detections" << payload.value(QStringLiteral("detections")).toInt()
-                        << "alerts" << payload.value(QStringLiteral("alerts")).toInt();
-            }
-        }
-    };
-
     if (reply->error() != QNetworkReply::NoError || statusCode >= 400) {
         qWarning() << "Dashboard request" << key << "failed:" << reply->errorString() << "code" << statusCode;
         if (statusCode == 401 || statusCode == 403) {
@@ -966,7 +941,7 @@ void MainWindow::handleDashboardReply()
             dashboardState.hasEvents = true;
         }
         reply->deleteLater();
-        finalize();
+        finalizeDashboardPiece();
         return;
     }
 
@@ -985,23 +960,84 @@ void MainWindow::handleDashboardReply()
             dashboardState.hasEvents = true;
         }
         reply->deleteLater();
-        finalize();
+        finalizeDashboardPiece();
         return;
     }
 
     if (key == QStringLiteral("summary")) {
         dashboardState.summary = extractSummaryObject(doc);
         dashboardState.hasSummary = true;
+        if (dashboardState.summary.isEmpty())
+            qWarning() << "[Dashboard] Summary payload empty";
     } else if (key == QStringLiteral("detections_by_hour")) {
         dashboardState.hourlyDetections = parseHourlyDetections(doc);
         dashboardState.hasHourlyDetections = true;
+        if (dashboardState.hourlyDetections.isEmpty())
+            qWarning() << "[Dashboard] Hourly detections payload empty";
     } else if (key == QStringLiteral("events")) {
         dashboardState.events = normalizeEvents(doc);
         dashboardState.hasEvents = true;
+        if (dashboardState.events.isEmpty())
+            qWarning() << "[Dashboard] Events payload empty";
     }
 
     reply->deleteLater();
-    finalize();
+    finalizeDashboardPiece();
+}
+
+void MainWindow::handleStatsSummary(const QJsonObject& summary)
+{
+    dashboardState.summary = summary;
+    dashboardState.hasSummary = true;
+    if (dashboardState.summary.isEmpty())
+        qWarning() << "[Dashboard] Summary payload empty";
+    finalizeDashboardPiece();
+}
+
+void MainWindow::handleStatsDetections(const QJsonArray& detections)
+{
+    QJsonDocument doc;
+    if (!detections.isEmpty())
+        doc = QJsonDocument(detections);
+    else
+        doc = QJsonDocument(QJsonObject{ { QStringLiteral("detections"), detections } });
+
+    dashboardState.hourlyDetections = parseHourlyDetections(doc);
+    dashboardState.hasHourlyDetections = true;
+    if (dashboardState.hourlyDetections.isEmpty())
+        qWarning() << "[Dashboard] Hourly detections payload empty";
+    finalizeDashboardPiece();
+}
+
+void MainWindow::handleStatsEvents(const QJsonArray& events)
+{
+    QJsonDocument doc;
+    if (!events.isEmpty())
+        doc = QJsonDocument(events);
+    else
+        doc = QJsonDocument(QJsonObject{ { QStringLiteral("events"), events } });
+
+    dashboardState.events = normalizeEvents(doc);
+    dashboardState.hasEvents = true;
+    if (dashboardState.events.isEmpty())
+        qWarning() << "[Dashboard] Events payload empty";
+    finalizeDashboardPiece();
+}
+
+void MainWindow::handleStatsFailed(const QString& key, const QString& error)
+{
+    qWarning() << "[Dashboard]" << key << "fetch failed:" << error;
+    if (key == QStringLiteral("summary")) {
+        dashboardState.summary = QJsonObject();
+        dashboardState.hasSummary = true;
+    } else if (key == QStringLiteral("detections_by_hour")) {
+        dashboardState.hourlyDetections = QList<int>(24, 0);
+        dashboardState.hasHourlyDetections = true;
+    } else if (key == QStringLiteral("events")) {
+        dashboardState.events = QJsonArray();
+        dashboardState.hasEvents = true;
+    }
+    finalizeDashboardPiece();
 }
 
 QJsonObject MainWindow::composeDashboardPayload() const
@@ -1020,6 +1056,20 @@ QJsonObject MainWindow::composeDashboardPayload() const
                 const int parsed = v.toString().toInt(&ok);
                 if (ok)
                     return parsed;
+            }
+            if (v.isObject()) {
+                // allow nested { value: N } style
+                const QJsonObject nested = v.toObject();
+                if (nested.contains(QStringLiteral("value"))) {
+                    const QJsonValue nv = nested.value(QStringLiteral("value"));
+                    if (nv.isDouble())
+                        return nv.toInt();
+                }
+                if (nested.contains(QStringLiteral("count"))) {
+                    const QJsonValue nv = nested.value(QStringLiteral("count"));
+                    if (nv.isDouble())
+                        return nv.toInt();
+                }
             }
         }
         return fallback;
@@ -1050,14 +1100,20 @@ QJsonObject MainWindow::composeDashboardPayload() const
         QStringLiteral("active_cameras"),
         QStringLiteral("activeCameras"),
         QStringLiteral("camerasOnline"),
+        QStringLiteral("cameras_online"),
+        QStringLiteral("online_cameras"),
+        QStringLiteral("camera_count"),
         QStringLiteral("total_cameras")
     }, 0));
 
     payload.insert(QStringLiteral("detections"), pickInt(payload, {
         QStringLiteral("detections"),
         QStringLiteral("detections_today"),
+        QStringLiteral("detections_today_count"),
         QStringLiteral("todayDetections"),
         QStringLiteral("totalDetections"),
+        QStringLiteral("detections_count"),
+        QStringLiteral("total_detections"),
         QStringLiteral("count")
     }, 0));
 
@@ -1065,12 +1121,16 @@ QJsonObject MainWindow::composeDashboardPayload() const
         QStringLiteral("alerts"),
         QStringLiteral("alerts_open"),
         QStringLiteral("openAlerts"),
-        QStringLiteral("alertCount")
+        QStringLiteral("alertCount"),
+        QStringLiteral("alerts_today"),
+        QStringLiteral("events_today"),
+        QStringLiteral("events_count")
     }, 0));
 
     payload.insert(QStringLiteral("ai_active"), pickBool(payload, {
         QStringLiteral("ai_active"),
         QStringLiteral("aiActive"),
+        QStringLiteral("ai_enabled"),
         QStringLiteral("ai_running"),
         QStringLiteral("aiRunning")
     }, false));
@@ -1081,9 +1141,40 @@ QJsonObject MainWindow::composeDashboardPayload() const
             activity.append(value);
     }
     payload.insert(QStringLiteral("activity"), activity);
+
+    // derive counts from activity/events when summary fields missing
+    if (payload.value(QStringLiteral("detections")).toInt() == 0 && !dashboardState.hourlyDetections.isEmpty()) {
+        int sum = 0;
+        for (int v : dashboardState.hourlyDetections)
+            sum += v;
+        payload.insert(QStringLiteral("detections"), sum);
+    }
+
+    const int eventsCount = dashboardState.events.size();
+    if (payload.value(QStringLiteral("alerts")).toInt() == 0 && eventsCount > 0)
+        payload.insert(QStringLiteral("alerts"), eventsCount);
+
     payload.insert(QStringLiteral("events"), dashboardState.events);
 
     return payload;
+}
+
+void MainWindow::finalizeDashboardPiece()
+{
+    pendingDashboardRequests = std::max(0, pendingDashboardRequests - 1);
+    if (pendingDashboardRequests == 0) {
+        dashboardRequestInFlight = false;
+        if (dashboardState.ready() && dashboardPage) {
+            const QJsonObject payload = composeDashboardPayload();
+            dashboardPage->applyDashboardData(payload);
+            lastDashboardFetch = QDateTime::currentDateTime();
+            qInfo() << "[Dashboard]" << "Refreshed"
+                << lastDashboardFetch.toString(Qt::ISODate)
+                << "cameras" << payload.value(QStringLiteral("cameras")).toInt()
+                << "detections" << payload.value(QStringLiteral("detections")).toInt()
+                << "alerts" << payload.value(QStringLiteral("alerts")).toInt();
+        }
+    }
 }
 
 /**
@@ -1104,6 +1195,8 @@ void MainWindow::refreshAuthToken()
     const QString envToken = qEnvironmentVariable("DASHBOARD_BEARER");
     if (!envToken.isEmpty()) {
         authToken = envToken;
+        if (supabaseClient)
+            supabaseClient->applySession(authToken, {});
         return;
     }
 
@@ -1142,6 +1235,8 @@ void MainWindow::handleAuthResult(const AuthResult& result)
     }
 
     authToken = result.token;
+    if (supabaseClient)
+        supabaseClient->applySession(authToken, result.expiresAt);
     fetchDashboard();
 }
 

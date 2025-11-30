@@ -197,6 +197,45 @@ void SupabaseClient::postEvents(const QList<EventPayload>& events)
         postEvent(ev);
 }
 
+void SupabaseClient::fetchStatsSummary()
+{
+    if (!isAuthenticated()) {
+        emit statsFetchFailed(QStringLiteral("summary"), QStringLiteral("Not authenticated"));
+        return;
+    }
+    QNetworkRequest req = authorizedRequest(QStringLiteral("/api/stats/summary"));
+    QNetworkReply* reply = network.get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        handleStatsReply(reply, QStringLiteral("summary"));
+    });
+}
+
+void SupabaseClient::fetchStatsDetectionsByHour()
+{
+    if (!isAuthenticated()) {
+        emit statsFetchFailed(QStringLiteral("detections_by_hour"), QStringLiteral("Not authenticated"));
+        return;
+    }
+    QNetworkRequest req = authorizedRequest(QStringLiteral("/api/stats/detections-by-hour"));
+    QNetworkReply* reply = network.get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        handleStatsReply(reply, QStringLiteral("detections_by_hour"));
+    });
+}
+
+void SupabaseClient::fetchStatsEvents()
+{
+    if (!isAuthenticated()) {
+        emit statsFetchFailed(QStringLiteral("events"), QStringLiteral("Not authenticated"));
+        return;
+    }
+    QNetworkRequest req = authorizedRequest(QStringLiteral("/api/stats/events"));
+    QNetworkReply* reply = network.get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        handleStatsReply(reply, QStringLiteral("events"));
+    });
+}
+
 void SupabaseClient::postAlert(const QString& alertType, const QString& message, const QString& severity, const QImage& snapshot)
 {
     if (!isAuthenticated()) {
@@ -737,6 +776,44 @@ void SupabaseClient::handleCameraUpdateReply(QNetworkReply* reply)
         return;
     }
     emit cameraUpdateFailed(QStringLiteral("Invalid response"));
+}
+
+void SupabaseClient::handleStatsReply(QNetworkReply* reply, const QString& key)
+{
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QString reason = reply->attribute(QNetworkRequest::HttpReasonPhraseAttribute).toString();
+    const QByteArray body = reply->readAll();
+    if (reply->error() != QNetworkReply::NoError) {
+        const QString error = describeNetworkResponse(statusCode, reason, reply->errorString(), body, true);
+        emit statsFetchFailed(key, error);
+        reply->deleteLater();
+        return;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(body, &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        emit statsFetchFailed(key, QStringLiteral("Parse error: %1").arg(parseError.errorString()));
+        reply->deleteLater();
+        return;
+    }
+
+    if (key == QStringLiteral("summary")) {
+        const QJsonObject obj = doc.isObject() ? doc.object() : QJsonObject();
+        emit statsSummaryReceived(obj);
+    } else if (key == QStringLiteral("detections_by_hour")) {
+        QJsonArray arr = doc.isArray() ? doc.array() : doc.object().value(QStringLiteral("data")).toArray();
+        if (arr.isEmpty())
+            arr = doc.object().value(QStringLiteral("detections")).toArray();
+        emit statsDetectionsByHourReceived(arr);
+    } else if (key == QStringLiteral("events")) {
+        QJsonArray arr = doc.isArray() ? doc.array() : doc.object().value(QStringLiteral("events")).toArray();
+        if (arr.isEmpty())
+            arr = doc.object().value(QStringLiteral("data")).toArray();
+        emit statsEventsReceived(arr);
+    }
+
+    reply->deleteLater();
 }
 
 
