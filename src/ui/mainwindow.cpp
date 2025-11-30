@@ -1178,10 +1178,10 @@ void MainWindow::finalizeDashboardPiece()
 }
 
 /**
- * @brief Refreshes the authentication token using environment variables or Supabase.
+ * @brief Refreshes the authentication token using Supabase email/password.
  *
- * Prefers a pre-set bearer token; otherwise attempts email/password login. Guards
- * against concurrent refresh attempts.
+ * Reads APP_EMAIL/APP_PASSWORD from the environment and performs a Supabase login.
+ * Guards against concurrent refresh attempts.
  *
  * @return void
  * @throws None
@@ -1192,14 +1192,6 @@ void MainWindow::refreshAuthToken()
     if (authRefreshInFlight)
         return;
 
-    const QString envToken = qEnvironmentVariable("DASHBOARD_BEARER");
-    if (!envToken.isEmpty()) {
-        authToken = envToken;
-        if (supabaseClient)
-            supabaseClient->applySession(authToken, {});
-        return;
-    }
-
     if (!supabaseClient) {
         qWarning() << "Cannot refresh auth token: Supabase client not available";
         return;
@@ -1208,7 +1200,7 @@ void MainWindow::refreshAuthToken()
     const QString email = qEnvironmentVariable("APP_EMAIL");
     const QString password = qEnvironmentVariable("APP_PASSWORD");
     if (email.isEmpty() || password.isEmpty()) {
-        qWarning() << "Auth token missing; set DASHBOARD_BEARER or APP_EMAIL/APP_PASSWORD to refresh automatically.";
+        qWarning() << "Auth token missing; set APP_EMAIL/APP_PASSWORD to refresh automatically.";
         return;
     }
 
@@ -1234,9 +1226,8 @@ void MainWindow::handleAuthResult(const AuthResult& result)
         return;
     }
 
-    authToken = result.token;
     if (supabaseClient)
-        supabaseClient->applySession(authToken, result.expiresAt);
+        supabaseClient->applySession(result.token, result.expiresAt);
     fetchDashboard();
 }
 
