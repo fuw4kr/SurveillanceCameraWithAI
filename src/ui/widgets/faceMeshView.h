@@ -83,7 +83,7 @@ private:
      * @throws None
      * @example resetCamera(points);
      */
-    void resetCamera(const QVector<QVector3D>& points);
+    void resetCamera();
     /**
      * @brief Creates RGB axes helpers at the origin.
      * @return void
