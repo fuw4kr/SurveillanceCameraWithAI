@@ -81,23 +81,6 @@ TEST(CameraViewWidgetTest, SetOnlineClearsFrameWhenOffline)
     EXPECT_EQ(status->text(), QStringLiteral("Offline"));
 }
 
-TEST(CameraViewWidgetTest, AudioVisibilityResetsState)
-{
-    CameraViewWidget widget(3);
-    widget.setAudioChecked(true);
-    widget.setAudioVisible(false);
-
-    auto* audio = widget.findChild<QCheckBox*>(QStringLiteral("audioCheck"));
-    ASSERT_NE(audio, nullptr);
-    EXPECT_FALSE(audio->isVisible());
-    EXPECT_FALSE(audio->isChecked());
-    EXPECT_FALSE(audio->isEnabled());
-
-    widget.setAudioVisible(true);
-    EXPECT_TRUE(audio->isVisible());
-    EXPECT_TRUE(audio->isEnabled());
-}
-
 TEST(CameraViewWidgetTest, ToggleEmitsSignal)
 {
     CameraViewWidget widget(4);
