@@ -228,6 +228,16 @@ void DashboardPage::updateActivityChart(const QList<int>& values)
 
 void DashboardPage::updateRecentEvents(const QList<QStringList>& rows)
 {
+    if (rows.isEmpty()) {
+        tableEvents->setRowCount(1);
+        tableEvents->setSpan(0, 0, 1, tableEvents->columnCount());
+        auto* placeholder = new QTableWidgetItem(tr("No events"));
+        placeholder->setFlags(placeholder->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEditable);
+        tableEvents->setItem(0, 0, placeholder);
+        return;
+    }
+
+    tableEvents->clearSpans();
     tableEvents->setRowCount(rows.size());
     int r = 0;
     for (const QStringList& row : rows) {

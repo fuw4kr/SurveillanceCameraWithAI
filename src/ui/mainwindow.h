@@ -43,6 +43,10 @@
 #include <QThread>
 #include <QMetaObject>
 #include <QUrl>
+#include <QDateTime>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QList>
 
 class QNetworkAccessManager;
 class QTimer;
@@ -208,6 +212,30 @@ private:
         Dark
     };
 
+    struct DashboardDataState {
+        QJsonObject summary;
+        QList<int> hourlyDetections;
+        QJsonArray events;
+        bool hasSummary = false;
+        bool hasHourlyDetections = false;
+        bool hasEvents = false;
+
+        void reset()
+        {
+            summary = QJsonObject();
+            hourlyDetections.clear();
+            events = QJsonArray();
+            hasSummary = false;
+            hasHourlyDetections = false;
+            hasEvents = false;
+        }
+
+        bool ready() const
+        {
+            return hasSummary && hasHourlyDetections && hasEvents;
+        }
+    };
+
     // === UI elements ===
     QWidget* titleBar;
     QLabel* IconName;
@@ -260,7 +288,10 @@ private:
     bool dashboardRequestInFlight = false;
     bool authRefreshInFlight = false;
     QUrl apiBaseUrl{ QStringLiteral("https://myserver-tc2d.onrender.com") };
-    int dashboardRefreshIntervalMs = 60000;
+    int dashboardRefreshIntervalMs = 20000;
+    DashboardDataState dashboardState;
+    int pendingDashboardRequests = 0;
+    QDateTime lastDashboardFetch;
 
     // === Setup ===
     void setupUi();
@@ -279,6 +310,7 @@ private:
     void setupDashboardPolling();
     void fetchDashboard();
     void refreshAuthToken();
+    QJsonObject composeDashboardPayload() const;
 };
 
 #endif // MAINWINDOW_H
