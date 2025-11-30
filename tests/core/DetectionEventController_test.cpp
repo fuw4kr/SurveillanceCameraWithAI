@@ -41,8 +41,15 @@ public:
         return mapping.value(name.toLower());
     }
 
-    void sendDetectionStatus(const QString& personId, int cameraId, bool active, const QDateTime& timestamp) override
+    void sendDetectionStatus(const QString& personId,
+        int cameraId,
+        bool active,
+        const QDateTime& timestamp,
+        const QImage& snapshot = QImage(),
+        float confidence = -1.0f) override
     {
+        Q_UNUSED(snapshot);
+        Q_UNUSED(confidence);
         events.push_back(RecordedEvent{ personId, cameraId, active, timestamp });
     }
 
