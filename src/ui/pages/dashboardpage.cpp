@@ -54,7 +54,9 @@ void DashboardPage::setupUi()
     cardsLayout->setSpacing(20);
 
     lblCameras = new QLabel("0");
+    lblCameras->setObjectName(QStringLiteral("lblCameras"));
     lblDetections = new QLabel("0");
+    lblDetections->setObjectName(QStringLiteral("lblDetections"));
     lblAlerts = new QLabel("0");
     lblAIStatus = new QLabel(tr("Inactive"));
 
@@ -157,6 +159,7 @@ void DashboardPage::setupChart()
     series->attachAxis(axisY);
 
     chartView = new QChartView(chart);
+    chartView->setObjectName(QStringLiteral("dashboardChart"));
     chartView->setRenderHint(QPainter::Antialiasing);
     chartView->setMinimumHeight(250);
 }

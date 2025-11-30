@@ -84,13 +84,16 @@ jobs:
       - name: Create archive directory
         run: New-Item -ItemType Directory -Force -Path "${{ env.ARCHIVE_PATH }}"
 
-      # 2. Налаштовуємо кеш (використовуємо офіційний action v4)
       - name: Restore/Save vcpkg archives
         uses: actions/cache@v4
         id: cache
         with:
           path: ${{ env.ARCHIVE_PATH }}
+          # Основний ключ (динамічний)
           key: ${{ steps.cache-key.outputs.KEY }}
+          # Запасний ключ (ваш конкретний хеш)
+          restore-keys: |
+            Windows-vcpkg-9D662B1FB17BA73F3E982944A71A754A1ADE1EB0BF99655EE23B8EE5725A3643
 
       # 3. Якщо кешу немає - запускаємо vcpkg
       - name: Install Dependencies (vcpkg)

@@ -133,7 +133,7 @@ public:
      * @throws None
      * @example QString id = sync.personIdForName("Alice");
      */
-    QString personIdForName(const QString& name) const;
+    virtual QString personIdForName(const QString& name) const;
     /**
      * @brief Sends a detection status event to the server.
      * @param personId Target person id.
@@ -144,7 +144,7 @@ public:
      * @throws None
      * @example sync.sendDetectionStatus(id, 1, true, QDateTime::currentDateTimeUtc());
      */
-    void sendDetectionStatus(const QString& personId,
+virtual void sendDetectionStatus(const QString& personId,
         int cameraId,
         bool active,
         const QDateTime& timestamp,
@@ -253,6 +253,7 @@ private slots:
     void handleCameraUpdateFailed(const QString& error);
 
 private:
+    friend class ServerSyncManagerTestAccessor;
     void requestPersonsRefresh();
     bool ensureAuthenticated();
     bool writeEmbeddingsFile(const QList<EmbeddingRecord>& embeddings, QString* errorOut = nullptr) const;

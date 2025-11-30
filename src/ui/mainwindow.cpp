@@ -94,6 +94,32 @@ QList<int> parseHourlyDetections(const QJsonDocument& doc)
         }
     }
 
+    const auto applyMap = [&](const QJsonObject& map) -> bool {
+        bool any = false;
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+            bool ok = false;
+            const int hour = it.key().toInt(&ok);
+            if (!ok)
+                continue;
+            if (hour < 0 || hour >= result.size())
+                continue;
+            if (it.value().isDouble()) {
+                result[hour] = it.value().toInt();
+                any = true;
+            }
+        }
+        return any;
+    };
+
+    if (arr.isEmpty() && doc.isObject()) {
+        const QJsonObject obj = doc.object();
+        if (applyMap(obj))
+            return result;
+        const QJsonObject dataObj = obj.value(QStringLiteral("data")).toObject();
+        if (applyMap(dataObj))
+            return result;
+    }
+
     bool anyData = false;
     int idx = 0;
     for (const auto& v : arr) {

@@ -8,10 +8,11 @@
 #include "ServerSyncManager.h"
 #include <QDebug>
 
-DetectionEventController::DetectionEventController(AIProcessor* processor, ServerSyncManager* sync, QObject* parent)
+DetectionEventController::DetectionEventController(AIProcessor* processor, ServerSyncManager* sync, QObject* parent, int timeoutMsValue)
     : QObject(parent)
     , aiProcessor(processor)
     , serverSync(sync)
+    , timeoutMs(timeoutMsValue)
 {
     if (aiProcessor) {
         connect(aiProcessor, &AIProcessor::frameProcessed,

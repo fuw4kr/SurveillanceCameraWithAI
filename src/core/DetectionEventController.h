@@ -21,6 +21,8 @@
 #include <QVector>
 #include <QSize>
 
+#include "AIProcessor.h"
+
 class AIProcessor;
 class ServerSyncManager;
 struct Detection;
@@ -44,7 +46,7 @@ public:
      * @throws None
      * @example DetectionEventController ctrl(ai, sync, this);
      */
-    DetectionEventController(AIProcessor* processor, ServerSyncManager* sync, QObject* parent = nullptr);
+    DetectionEventController(AIProcessor* processor, ServerSyncManager* sync, QObject* parent = nullptr, int timeoutMs = 2000);
 
 private slots:
     /**
@@ -79,7 +81,7 @@ private:
     AIProcessor* aiProcessor = nullptr;
     ServerSyncManager* serverSync = nullptr;
     QHash<QString, ActiveEvent> activeEvents;
-    const int timeoutMs = 2000;
+    int timeoutMs = 2000;
 };
 
 #endif // DETECTIONEVENTCONTROLLER_H
