@@ -43,6 +43,7 @@ target_link_libraries(core_tests PRIVATE
     Qt6::Core
     Qt6::Network
     Qt6::Gui
+    Qt6::Multimedia
     ${OpenCV_LIBS}
 )
 gtest_discover_tests(core_tests)
@@ -77,6 +78,7 @@ target_link_libraries(ui_widgets_tests PRIVATE
     GTest::gtest
     Qt6::Widgets
     Qt6::Gui
+    Qt6::Multimedia
     Qt6::Test
 )
 gtest_discover_tests(ui_widgets_tests)
@@ -94,6 +96,7 @@ target_link_libraries(ui_windowedit_tests PRIVATE
     GTest::gtest
     Qt6::Widgets
     Qt6::Gui
+    Qt6::Multimedia
     Qt6::Test
 )
 gtest_discover_tests(ui_windowedit_tests)
@@ -121,6 +124,7 @@ target_link_libraries(ui_controllers_tests PRIVATE
     Qt6::Gui
     Qt6::Network
     Qt6::Core
+    Qt6::Multimedia
     Qt6::Test
     ${OpenCV_LIBS}
 )
