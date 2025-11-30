@@ -14,6 +14,9 @@ set(_extra_third_party_includes)
 if (EXISTS "${_vcpkg_include}")
     list(APPEND _extra_third_party_includes "${_vcpkg_include}")
 endif()
+if (DEFINED ONNX_RUNTIME_INCLUDE_DIR AND ONNX_RUNTIME_INCLUDE_DIR AND EXISTS "${ONNX_RUNTIME_INCLUDE_DIR}")
+    list(APPEND _extra_third_party_includes "${ONNX_RUNTIME_INCLUDE_DIR}")
+endif()
 
 # ============== Core tests ==============
 add_executable(core_tests
