@@ -23,6 +23,8 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QUrl>
+#include <QJsonArray>
+#include <QJsonObject>
 
 struct AuthResult {
     bool success = false;
@@ -196,6 +198,9 @@ public:
     void createCamera(const QString& name, const QString& streamUrl, const QString& ipAddress = QString(), const QString& location = QString(), const QString& status = QStringLiteral("active"));
     void deleteCamera(const QString& cameraId);
     void updateCamera(const QString& cameraId, const QJsonObject& fields);
+    void fetchStatsSummary();
+    void fetchStatsDetectionsByHour();
+    void fetchStatsEvents();
 
 signals:
     void loginFinished(const AuthResult& result);
@@ -225,6 +230,10 @@ signals:
     void cameraDeleteFailed(const QString& error);
     void cameraUpdated(const CameraRecord& camera);
     void cameraUpdateFailed(const QString& error);
+    void statsSummaryReceived(const QJsonObject& summary);
+    void statsDetectionsByHourReceived(const QJsonArray& detections);
+    void statsEventsReceived(const QJsonArray& events);
+    void statsFetchFailed(const QString& key, const QString& error);
 
 private:
     void handleLoginReply(QNetworkReply* reply);
@@ -240,6 +249,7 @@ private:
     void handleCameraCreateReply(QNetworkReply* reply);
     void handleCameraDeleteReply(QNetworkReply* reply, const QString& cameraId);
     void handleCameraUpdateReply(QNetworkReply* reply);
+    void handleStatsReply(QNetworkReply* reply, const QString& key);
     QNetworkRequest authorizedRequest(const QString& path, bool jsonContent = true) const;
 
     QNetworkAccessManager network;
