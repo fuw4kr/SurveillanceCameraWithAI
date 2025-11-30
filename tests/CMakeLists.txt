@@ -21,12 +21,14 @@ add_executable(core_tests
 )
 target_include_directories(core_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
+    ${OpenCV_INCLUDE_DIRS}
 )
 target_link_libraries(core_tests PRIVATE
     GTest::gtest
     Qt6::Core
     Qt6::Network
     Qt6::Gui
+    ${OpenCV_LIBS}
 )
 gtest_discover_tests(core_tests)
 
