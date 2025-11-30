@@ -4,6 +4,17 @@ find_package(GTest CONFIG REQUIRED)
 include(GoogleTest)
 find_package(OpenCV REQUIRED)
 
+# Try to pick up vcpkg-installed headers (e.g., onnxruntime) used by project headers.
+set(_vcpkg_triplet "${VCPKG_TARGET_TRIPLET}")
+if (NOT _vcpkg_triplet OR _vcpkg_triplet STREQUAL "")
+    set(_vcpkg_triplet "x64-windows")
+endif()
+set(_vcpkg_include "${CMAKE_BINARY_DIR}/vcpkg_installed/${_vcpkg_triplet}/include")
+set(_extra_third_party_includes)
+if (EXISTS "${_vcpkg_include}")
+    list(APPEND _extra_third_party_includes "${_vcpkg_include}")
+endif()
+
 # ============== Core tests ==============
 add_executable(core_tests
     core/core_test_main.cpp
@@ -22,6 +33,7 @@ add_executable(core_tests
 target_include_directories(core_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${OpenCV_INCLUDE_DIRS}
+    ${_extra_third_party_includes}
 )
 target_link_libraries(core_tests PRIVATE
     GTest::gtest
@@ -98,6 +110,7 @@ add_executable(ui_controllers_tests
 target_include_directories(ui_controllers_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${OpenCV_INCLUDE_DIRS}
+    ${_extra_third_party_includes}
 )
 target_link_libraries(ui_controllers_tests PRIVATE
     GTest::gtest
