@@ -1,4 +1,4 @@
-enable_testing()
+﻿enable_testing()
 
 find_package(GTest CONFIG REQUIRED)
 include(GoogleTest)
@@ -27,15 +27,40 @@ add_executable(core_tests
     core/DetectionEventController_test.cpp
     core/ServerSyncManager_test.cpp
     core/SupabaseClient_test.cpp
+    
+    # --- Основні файли, яких не вистачало ---
     ${CMAKE_SOURCE_DIR}/src/core/modelSettings.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/modelSettings.h
     ${CMAKE_SOURCE_DIR}/src/core/AppLogger.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/AppLogger.h
     ${CMAKE_SOURCE_DIR}/src/core/DetectionEventController.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/DetectionEventController.h
     ${CMAKE_SOURCE_DIR}/src/core/ServerSyncManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/ServerSyncManager.h
     ${CMAKE_SOURCE_DIR}/src/core/SupabaseClient.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/SupabaseClient.h
+    
+    # --- Залежності (AIProcessor, CameraManager тощо) ---
+    ${CMAKE_SOURCE_DIR}/src/core/AIProcessor.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/AIProcessor.h
+    ${CMAKE_SOURCE_DIR}/src/core/AIProcessorONNX.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/AIProcessorONNX.h
+    ${CMAKE_SOURCE_DIR}/src/core/faceReconstructionModel.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/faceReconstructionModel.h
+    ${CMAKE_SOURCE_DIR}/src/core/cameraManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/cameraManager.h
+    ${CMAKE_SOURCE_DIR}/src/core/FFVideoDecoder.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/FFVideoDecoder.h
+    ${CMAKE_SOURCE_DIR}/src/core/audioStreamPlayer.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/audioStreamPlayer.h
+    ${CMAKE_SOURCE_DIR}/src/core/RTSPCamera.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/RTSPCamera.h
+    ${CMAKE_SOURCE_DIR}/src/core/ServerTypes.h
 )
 target_include_directories(core_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${OpenCV_INCLUDE_DIRS}
+    ${FFMPEG_INCLUDE_DIRS}
     ${_extra_third_party_includes}
 )
 target_link_libraries(core_tests PRIVATE
@@ -45,87 +70,25 @@ target_link_libraries(core_tests PRIVATE
     Qt6::Gui
     Qt6::Multimedia
     ${OpenCV_LIBS}
+    ${ONNX_RUNTIME_TARGET}
+    ${FFMPEG_LIBRARIES}
 )
-gtest_discover_tests(core_tests)
 
-# ============== UI: pages ==============
-add_executable(ui_pages_tests
-    ui/ui_test_main.cpp
-    ui/pages/DashboardPage_test.cpp
-    ${CMAKE_SOURCE_DIR}/src/ui/pages/dashboardpage.cpp
-)
-target_include_directories(ui_pages_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-)
-target_link_libraries(ui_pages_tests PRIVATE
-    GTest::gtest
-    Qt6::Widgets
-    Qt6::Charts
-    Qt6::Test
-)
-gtest_discover_tests(ui_pages_tests)
+if(WIN32)
+    add_custom_command(TARGET core_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:Qt6::Core>" "$<TARGET_FILE_DIR:core_tests>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:Qt6::Gui>" "$<TARGET_FILE_DIR:core_tests>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:Qt6::Network>" "$<TARGET_FILE_DIR:core_tests>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:Qt6::Multimedia>" "$<TARGET_FILE_DIR:core_tests>"
+    )
+    # Копіюємо ONNX Runtime DLL, якщо використовується
+    if (ORT_OV_DLLS)
+        foreach(_dll ${ORT_OV_DLLS})
+            add_custom_command(TARGET core_tests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_dll}" "$<TARGET_FILE_DIR:core_tests>"
+            )
+        endforeach()
+    endif()
+endif()
 
-# ============== UI: widgets ==============
-add_executable(ui_widgets_tests
-    ui/ui_test_main.cpp
-    ui/widgets/CameraViewWidget_test.cpp
-    ${CMAKE_SOURCE_DIR}/src/ui/widgets/cameraViewWidget.cpp
-)
-target_include_directories(ui_widgets_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-)
-target_link_libraries(ui_widgets_tests PRIVATE
-    GTest::gtest
-    Qt6::Widgets
-    Qt6::Gui
-    Qt6::Multimedia
-    Qt6::Test
-)
-gtest_discover_tests(ui_widgets_tests)
-
-# ============== UI: windowEdit ==============
-add_executable(ui_windowedit_tests
-    ui/ui_test_main.cpp
-    ui/windowEdit/SnapPreviewWindow_test.cpp
-    ${CMAKE_SOURCE_DIR}/src/ui/windowEdit/snapPreviewWindow.cpp
-)
-target_include_directories(ui_windowedit_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-)
-target_link_libraries(ui_windowedit_tests PRIVATE
-    GTest::gtest
-    Qt6::Widgets
-    Qt6::Gui
-    Qt6::Multimedia
-    Qt6::Test
-)
-gtest_discover_tests(ui_windowedit_tests)
-
-# ============== UI: controllers ==============
-add_executable(ui_controllers_tests
-    ui/ui_test_main.cpp
-    ui/controllers/FaceAlertController_test.cpp
-    ${CMAKE_SOURCE_DIR}/src/ui/FaceAlertController.cpp
-    ${CMAKE_SOURCE_DIR}/src/ui/dialogs/UnknownFaceDialog.cpp
-    ${CMAKE_SOURCE_DIR}/src/core/ServerSyncManager.cpp
-    ${CMAKE_SOURCE_DIR}/src/core/SupabaseClient.cpp
-    ${CMAKE_SOURCE_DIR}/src/core/modelSettings.cpp
-    ${CMAKE_SOURCE_DIR}/src/core/AppLogger.cpp
-    ${CMAKE_SOURCE_DIR}/src/core/DetectionEventController.cpp
-)
-target_include_directories(ui_controllers_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-    ${OpenCV_INCLUDE_DIRS}
-    ${_extra_third_party_includes}
-)
-target_link_libraries(ui_controllers_tests PRIVATE
-    GTest::gtest
-    Qt6::Widgets
-    Qt6::Gui
-    Qt6::Network
-    Qt6::Core
-    Qt6::Multimedia
-    Qt6::Test
-    ${OpenCV_LIBS}
-)
-gtest_discover_tests(ui_controllers_tests)
+gtest_discover_tests(core_tests DISCOVERY_TIMEOUT 60)

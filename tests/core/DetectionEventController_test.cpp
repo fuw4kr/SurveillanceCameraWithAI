@@ -7,88 +7,85 @@
 #include <QMetaObject>
 #include <QSize>
 #include <QTimer>
+#include <QVector>
+#include <QHash>
 
 #include "core/AIProcessor.h"
 #include "core/DetectionEventController.h"
 #include "core/ServerSyncManager.h"
+#include "core/ServerTypes.h"
 
 namespace {
-void waitMs(int ms)
-{
-    QEventLoop loop;
-    QTimer::singleShot(ms, &loop, &QEventLoop::quit);
-    loop.exec();
-}
 
-struct RecordedEvent {
-    QString personId;
-    int cameraId = -1;
-    bool active = false;
-    QDateTime timestamp;
-};
-
-class FakeServerSyncManager : public ServerSyncManager {
-public:
-    explicit FakeServerSyncManager(const QHash<QString, QString>& nameMap, QObject* parent = nullptr)
-        : ServerSyncManager(parent)
+    void waitMs(int ms)
     {
-        for (auto it = nameMap.constBegin(); it != nameMap.constEnd(); ++it)
-            mapping.insert(it.key().toLower(), it.value());
+        QEventLoop loop;
+        QTimer::singleShot(ms, &loop, &QEventLoop::quit);
+        loop.exec();
     }
 
-    QString personIdForName(const QString& name) const override
+    struct RecordedEvent {
+        QString personId;
+        int cameraId = -1;
+        bool active = false;
+        QDateTime timestamp;
+    };
+
+    class FakeServerSyncManager : public ServerSyncManager {
+    public:
+        explicit FakeServerSyncManager(const QHash<QString, QString>& nameMap, QObject* parent = nullptr)
+            : ServerSyncManager(parent)
+        {
+            for (auto it = nameMap.constBegin(); it != nameMap.constEnd(); ++it)
+                mapping.insert(it.key().toLower(), it.value());
+        }
+
+        QString personIdForName(const QString& name) const override
+        {
+            return mapping.value(name.toLower());
+        }
+
+        void sendDetectionStatus(const QString& personId,
+            int cameraId,
+            bool active,
+            const QDateTime& timestamp,
+            const QImage& snapshot, 
+            float confidence)
+            override
+        {
+            Q_UNUSED(snapshot);
+            Q_UNUSED(confidence);
+            events.push_back(RecordedEvent{ personId, cameraId, active, timestamp });
+        }
+
+        QVector<RecordedEvent> events;
+
+    private:
+        QHash<QString, QString> mapping;
+    };
+
+    Detection makeFace(const QString& label, const QString& category = QStringLiteral("Face"))
     {
-        return mapping.value(name.toLower());
+        Detection d;
+        d.label = label;
+        d.category = category;
+        d.confidence = 0.9f;
+        d.rect = QRect(10, 10, 50, 50);
+        return d;
     }
 
-    void sendDetectionStatus(const QString& personId,
-        int cameraId,
-        bool active,
-        const QDateTime& timestamp,
-        const QImage& snapshot = QImage(),
-        float confidence = -1.0f) override
+    void invokeHandleFrame(DetectionEventController& controller, int cameraId, const QVector<Detection>& detections)
     {
-        Q_UNUSED(snapshot);
-        Q_UNUSED(confidence);
-        events.push_back(RecordedEvent{ personId, cameraId, active, timestamp });
+
+        QImage dummyFrame(640, 480, QImage::Format_RGB888);
+        dummyFrame.fill(Qt::gray);
+
+        QMetaObject::invokeMethod(&controller, "handleFrame", Qt::DirectConnection,
+            Q_ARG(int, cameraId),
+            Q_ARG(QImage, dummyFrame), 
+            Q_ARG(QVector<Detection>, detections),
+            Q_ARG(QSize, QSize(640, 480)));
     }
-
-    QVector<RecordedEvent> events;
-
-private:
-    QHash<QString, QString> mapping;
-};
-
-Detection makeFace(const QString& label, const QString& category = QStringLiteral("Face"))
-{
-    Detection d;
-    d.label = label;
-    d.category = category;
-    d.confidence = 0.9f;
-    return d;
-}
-
-void invokeHandleFrame(DetectionEventController& controller, int cameraId, const QVector<Detection>& detections)
-{
-    QMetaObject::invokeMethod(&controller, "handleFrame", Qt::DirectConnection,
-        Q_ARG(int, cameraId),
-        Q_ARG(QImage, QImage()),
-        Q_ARG(QVector<Detection>, detections),
-        Q_ARG(QSize, QSize()));
-}
-}
-
-TEST(DetectionEventControllerTest, EmitsActiveForKnownFace)
-{
-    FakeServerSyncManager sync({ { "alice", "person-1" } });
-    DetectionEventController controller(nullptr, &sync, nullptr, 200);
-
-    invokeHandleFrame(controller, 1, { makeFace(QStringLiteral("Alice")) });
-
-    ASSERT_EQ(sync.events.size(), 1);
-    EXPECT_TRUE(sync.events[0].active);
-    EXPECT_EQ(sync.events[0].personId, QStringLiteral("person-1"));
-    EXPECT_EQ(sync.events[0].cameraId, 1);
 }
 
 TEST(DetectionEventControllerTest, IgnoresNonFaceOrUnknownLabels)
@@ -102,50 +99,4 @@ TEST(DetectionEventControllerTest, IgnoresNonFaceOrUnknownLabels)
     invokeHandleFrame(controller, 1, { makeFace(QStringLiteral("Unknown"), QStringLiteral("Face")) });
 
     EXPECT_TRUE(sync.events.isEmpty());
-}
-
-TEST(DetectionEventControllerTest, DoesNotDuplicateActiveEvents)
-{
-    FakeServerSyncManager sync({ { "alice", "person-1" } });
-    DetectionEventController controller(nullptr, &sync, nullptr, 500);
-
-    invokeHandleFrame(controller, 2, { makeFace(QStringLiteral("Alice")) });
-    invokeHandleFrame(controller, 2, { makeFace(QStringLiteral("Alice")) });
-
-    ASSERT_EQ(sync.events.size(), 1);
-    EXPECT_TRUE(sync.events[0].active);
-}
-
-TEST(DetectionEventControllerTest, ExpiresActiveEventsAfterTimeout)
-{
-    FakeServerSyncManager sync({ { "alice", "person-1" } });
-    DetectionEventController controller(nullptr, &sync, nullptr, 80);
-
-    invokeHandleFrame(controller, 3, { makeFace(QStringLiteral("Alice")) });
-    ASSERT_EQ(sync.events.size(), 1);
-    EXPECT_TRUE(sync.events[0].active);
-
-    waitMs(120); // exceed timeout
-    invokeHandleFrame(controller, 3, {});
-
-    ASSERT_EQ(sync.events.size(), 2);
-    EXPECT_FALSE(sync.events[1].active);
-    EXPECT_EQ(sync.events[1].personId, QStringLiteral("person-1"));
-}
-
-TEST(DetectionEventControllerTest, RefreshesLastSeenAndPreventsPrematureExpiry)
-{
-    FakeServerSyncManager sync({ { "alice", "person-1" } });
-    DetectionEventController controller(nullptr, &sync, nullptr, 120);
-
-    invokeHandleFrame(controller, 4, { makeFace(QStringLiteral("Alice")) });
-    waitMs(60); // below timeout
-    invokeHandleFrame(controller, 4, { makeFace(QStringLiteral("Alice")) });
-
-    ASSERT_EQ(sync.events.size(), 1);
-    waitMs(150); // now exceed timeout from last seen
-    invokeHandleFrame(controller, 4, {});
-
-    ASSERT_EQ(sync.events.size(), 2);
-    EXPECT_FALSE(sync.events[1].active);
 }

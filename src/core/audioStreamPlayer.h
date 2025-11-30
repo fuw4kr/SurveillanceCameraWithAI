@@ -66,6 +66,10 @@ public:
      */
     void stop();
 
+signals:
+    void errorOccurred(const QString& error);
+
+
 protected:
     /**
      * @brief Main decoding loop that reads, resamples, and feeds audio frames to QAudioSink.
