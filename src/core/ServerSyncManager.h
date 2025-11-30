@@ -5,9 +5,9 @@
  * @file ServerSyncManager.h
  * @brief Orchestrates synchronization of detections, persons, and embeddings with the backend.
  *
- * Handles authentication, periodic polling, queuing detection events, uploading embeddings
- * and avatars, and broadcasting updates to UI components. Integrates AIProcessor outputs
- * with SupabaseClient REST calls.
+ * Handles authentication, periodic polling, uploading embeddings and avatars, and
+ * broadcasting updates to UI components. Integrates AIProcessor outputs with
+ * SupabaseClient REST calls and streams debounced detection events to the server.
  *
  * @example
  * ServerSyncManager sync;
@@ -22,7 +22,6 @@
 #include <QDateTime>
 #include <QImage>
 #include <QObject>
-#include <QQueue>
 #include <QHash>
 #include <QTimer>
 #include <QSize>
@@ -34,7 +33,7 @@ class CameraManager;
 /**
  * @brief Manages backend communication for detections, alerts, and person records.
  *
- * Queues events to avoid flooding, refreshes person/embedding data, and exposes
+ * Posts detection lifecycle events, refreshes person/embedding data, and exposes
  * signals for UI updates.
  */
 class ServerSyncManager : public QObject
@@ -230,7 +229,6 @@ private slots:
     void handleEventPosted(const EventPayload& event);
     void handleEventPostFailed(const EventPayload& event, const QString& error);
     void handleSyncTick();
-    void handleFrameProcessed(int cameraId, const QImage& annotated, const QVector<Detection>& detections, const QSize& sourceSize);
     void handleAlertPosted();
     void handleAlertFailed(const QString& error);
     void handlePersonCreated(const PersonRecord& person);
@@ -255,13 +253,6 @@ private slots:
     void handleCameraUpdateFailed(const QString& error);
 
 private:
-    struct QueuedEvent {
-        EventPayload payload;
-        int attempts = 0;
-    };
-
-    void enqueueDetections(int cameraId, const QVector<Detection>& detections);
-    void flushEventQueue();
     void requestPersonsRefresh();
     bool ensureAuthenticated();
     bool writeEmbeddingsFile(const QList<EmbeddingRecord>& embeddings, QString* errorOut = nullptr) const;
@@ -275,8 +266,6 @@ private:
     SupabaseClient* client = nullptr;
     AIProcessor* aiProcessor = nullptr;
     CameraManager* cameraManager = nullptr;
-    bool detectionSyncPending = false;
-    QQueue<QueuedEvent> eventQueue;
     QList<PersonRecord> personsCache;
     QList<EmbeddingRecord> embeddingsCache;
     QList<CameraRecord> camerasCache;
@@ -293,12 +282,9 @@ private:
     bool configLoaded = false;
     bool loginInProgress = false;
     bool personsRequestActive = false;
-    bool eventRequestActive = false;
     bool embeddingsRequestActive = false;
     bool camerasRequestActive = false;
     bool manualCredentialsProvided = false;
-    const int maxEventQueueSize = 200;
-    const int maxEventAttempts = 3;
 };
 
 #endif // SERVERSYNCMANAGER_H

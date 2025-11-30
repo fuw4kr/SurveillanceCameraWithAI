@@ -396,7 +396,6 @@ void ServerSyncManager::handleLoginResult(const AuthResult& result)
     requestPersonsRefresh();
     requestEmbeddingsRefresh();
     requestCamerasRefresh();
-    flushEventQueue();
 }
 
 void ServerSyncManager::handlePersonsFetched(const QList<PersonRecord>& persons)
@@ -427,27 +426,15 @@ void ServerSyncManager::handlePersonsFetchFailed(const QString& error)
 
 void ServerSyncManager::handleEventPosted(const EventPayload& event)
 {
-    if (!eventQueue.isEmpty())
-        eventQueue.dequeue();
-    eventRequestActive = false;
     emit statusMessage(tr("Sent event: %1").arg(event.eventType));
-    flushEventQueue();
-    qInfo().noquote() << "[ServerSync]" << "Event delivered:" << event.eventType << "camera:" << event.cameraLabel;
+    const QString cameraRef = event.cameraId.isEmpty() ? event.cameraLabel : event.cameraId;
+    qInfo().noquote() << "[ServerSync]" << "Event delivered:" << event.eventType << "camera:" << cameraRef;
 }
 
 void ServerSyncManager::handleEventPostFailed(const EventPayload& event, const QString& error)
 {
-    if (!eventQueue.isEmpty())
-        eventQueue.head().attempts += 1;
-    const bool dropEvent = eventQueue.isEmpty() || eventQueue.head().attempts >= maxEventAttempts;
-    if (dropEvent && !eventQueue.isEmpty())
-        eventQueue.dequeue();
-    eventRequestActive = false;
     emit errorMessage(tr("Failed to post event \"%1\": %2").arg(event.eventType, error));
-    if (!dropEvent)
-        QTimer::singleShot(2000, this, &ServerSyncManager::flushEventQueue);
-    qWarning().noquote() << "[ServerSync]" << "Event delivery failed for" << event.eventType << ":" << error
-                         << (dropEvent ? " (dropped)" : " (will retry)");
+    qWarning().noquote() << "[ServerSync]" << "Event delivery failed for" << event.eventType << ":" << error;
 }
 
 void ServerSyncManager::handleSyncTick()
@@ -457,23 +444,7 @@ void ServerSyncManager::handleSyncTick()
     requestPersonsRefresh();
     requestEmbeddingsRefresh();
     requestCamerasRefresh();
-    flushEventQueue();
     qInfo() << "[ServerSync]" << "Manual sync executed";
-}
-
-void ServerSyncManager::handleFrameProcessed(int cameraId, const QImage&, const QVector<Detection>& detections, const QSize&)
-{
-    enqueueDetections(cameraId, detections);
-    if (!detections.isEmpty()) {
-        qInfo() << "[ServerSync]" << "Queued" << detections.size() << "detections from camera" << cameraId;
-        if (!detectionSyncPending) {
-            detectionSyncPending = true;
-            QTimer::singleShot(0, this, [this]() {
-                detectionSyncPending = false;
-                handleSyncTick();
-            });
-        }
-    }
 }
 
 void ServerSyncManager::handleAlertPosted()
@@ -670,24 +641,6 @@ QString ServerSyncManager::cameraIdForLocal(int cameraId) const
 {
     const QString source = cameraSourceForLocal(cameraId);
     return cameraIdForStream(source);
-}
-
-void ServerSyncManager::enqueueDetections(int cameraId, const QVector<Detection>& detections)
-{
-    Q_UNUSED(cameraId);
-    Q_UNUSED(detections);
-}
-
-void ServerSyncManager::flushEventQueue()
-{
-    if (eventRequestActive || eventQueue.isEmpty())
-        return;
-    if (!client->isAuthenticated())
-        return;
-
-    eventRequestActive = true;
-    qInfo() << "[ServerSync]" << "Flushing event queue. pending:" << eventQueue.size();
-    client->postEvent(eventQueue.head().payload);
 }
 
 void ServerSyncManager::requestPersonsRefresh()
