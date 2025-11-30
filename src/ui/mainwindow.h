@@ -288,7 +288,6 @@ private:
     QNetworkAccessManager* networkManager = nullptr;
     QTimer* dashboardTimer = nullptr;
     SupabaseClient* supabaseClient = nullptr;
-    QString authToken;
     bool dashboardRequestInFlight = false;
     bool authRefreshInFlight = false;
     QUrl apiBaseUrl{ QStringLiteral("https://myserver-tc2d.onrender.com") };
